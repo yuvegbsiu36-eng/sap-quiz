@@ -57,6 +57,11 @@
   <!-- スタート画面 -->
   <div id="start" class="panel">
     <div class="row" style="margin-bottom:12px;">
+      <label for="userNameInput">名前</label>
+      <input id="userNameInput" type="text" placeholder="ニックネームを入力（分析で誰のデータか区別します）"
+        style="font-size:.95rem;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#0b1220;color:var(--fg);flex:1;min-width:180px;" />
+    </div>
+    <div class="row" style="margin-bottom:12px;">
       <label>モード</label>
       <select id="modeSel">
         <option value="normal" selected>通常（出題数ぶん解く）</option>
@@ -4294,11 +4299,17 @@
   const all = DATA.questions;
 
   // ===== クラウド同期（任意）=====
-  // GAS WebアプリのURLを入れると、1問ごとに回答をクラウド（スプレッドシート）へ自動送信する。
+  // WebアプリのURL（GAS or Cloudflare Worker）を入れると、1問ごとに回答をクラウドへ自動送信する。
   // 空のままなら送信しない（localStorageのみ）＝友達配布版はこのまま空で配れる。
-  const SYNC_URL = 'https://still-dust-e041.yuvegbsiu36.workers.dev/';  // 自分用: Cloudflare Worker（同期ON）
+  const SYNC_URL = 'https://still-dust-e041.yuvegbsiu36.workers.dev/';                 // ← ここに受け口のURLを貼る（自分用のときだけ）
   const DEVICE  = 'phone';             // このHTMLを使う端末の名札（例: 'phone' / 'pc'）。分析で端末を区別できる
   const QUEUE_KEY = 'sap_c02_quiz_queue_v1';   // 未送信レコードの一時置き場
+
+  // ===== 利用者名（誰のデータか・自由入力）=====
+  // 初回に入力した名前をこのブラウザに保存し、以降は保持する。回答レコードに user として付ける。
+  const USER_KEY = 'sap_c02_quiz_user_v1';
+  function loadUser(){ try{ return localStorage.getItem(USER_KEY) || ''; }catch(e){ return ''; } }
+  function saveUser(name){ try{ localStorage.setItem(USER_KEY, name); }catch(e){} }
 
   function loadQueue(){ try{ return JSON.parse(localStorage.getItem(QUEUE_KEY)) || []; }catch(e){ return []; } }
   function saveQueue(q){ try{ localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); }catch(e){} }
@@ -4359,7 +4370,8 @@
       correct: correct,
       chosenSvc: chosen ? chosen.svc : null,   // 選んだ誤答が何のサービスか（取り違え分析用）
       mode: mode,
-      device: DEVICE                            // どの端末で解いたか
+      device: DEVICE,                           // どの端末で解いたか
+      user: loadUser()                          // 誰が解いたか（自由入力の名前・分析でアカウント別に見る）
     };
     log.push(rec);
     saveLog(log);
@@ -4374,6 +4386,10 @@
 
   const el = id=>document.getElementById(id);
   let pool=[], idx=0, score=0, wrong=[], answered=false, answeredCount=0, mode='normal';
+
+  // 名前欄：保存済みの名前を復元し、入力のたびに保存
+  el('userNameInput').value = loadUser();
+  el('userNameInput').addEventListener('input', e=>saveUser(e.target.value.trim()));
 
   function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
 
@@ -4535,7 +4551,15 @@
     el('retryWrongBtn').style.display = wrong.length? '' : 'none';
   }
 
-  el('startBtn').onclick=()=>{ mode=el('modeSel').value; start(buildPool()); };
+  el('startBtn').onclick=()=>{
+    saveUser(el('userNameInput').value.trim());
+    if(!loadUser()){
+      if(!confirm('名前が未入力です。分析で誰のデータか区別できません。このまま始めますか？')){
+        el('userNameInput').focus(); return;
+      }
+    }
+    mode=el('modeSel').value; start(buildPool());
+  };
   el('nextBtn').onclick=next;
   el('quitBtn').onclick=finish;
   el('againBtn').onclick=()=>{el('result').classList.add('hidden');el('start').classList.remove('hidden');el('mydata').classList.remove('hidden');refreshDataSummary();};
