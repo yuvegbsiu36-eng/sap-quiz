@@ -1,0 +1,4623 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAP-C02 サービス名クイズ</title>
+<style>
+  :root{
+    --bg:#0f172a; --card:#1e293b; --fg:#e2e8f0; --muted:#94a3b8;
+    --accent:#38bdf8; --ok:#22c55e; --ng:#ef4444; --border:#334155;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Meiryo",sans-serif;
+    background:var(--bg);color:var(--fg);line-height:1.6;}
+  .wrap{max-width:760px;margin:0 auto;padding:16px;}
+  h1{font-size:1.3rem;margin:.4em 0;}
+  .sub{color:var(--muted);font-size:.85rem;margin-bottom:16px;}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  label{font-size:.85rem;color:var(--muted);}
+  select,button{font-size:.95rem;padding:8px 12px;border-radius:8px;border:1px solid var(--border);
+    background:#0b1220;color:var(--fg);cursor:pointer;}
+  button.primary{background:var(--accent);color:#06283d;border:none;font-weight:700;}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  /* 選択肢は回答後(disabled)でも薄くしない＝答え合わせを読みやすく */
+  .choice:disabled{opacity:1;cursor:default;}
+  .choice.correct{color:#fff;}
+  .choice.wrong{color:#fff;}
+  .bar{height:8px;background:#0b1220;border-radius:999px;overflow:hidden;margin:10px 0;}
+  .bar>i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s;}
+  .stat{display:flex;gap:16px;font-size:.85rem;color:var(--muted);flex-wrap:wrap;}
+  .stat b{color:var(--fg);}
+  .qcat{display:inline-block;font-size:.7rem;color:var(--accent);border:1px solid var(--accent);
+    border-radius:999px;padding:1px 8px;margin-bottom:8px;}
+  .qtext{font-size:1.1rem;font-weight:700;margin:4px 0 14px;}
+  .choices{display:flex;flex-direction:column;gap:10px;}
+  .choice{text-align:left;padding:12px 14px;border:1px solid var(--border);border-radius:10px;
+    background:#0b1220;color:var(--fg);cursor:pointer;transition:.15s;}
+  .choice:hover:not(:disabled){border-color:var(--accent);}
+  .choice.correct{border-color:var(--ok);background:rgba(34,197,94,.15);}
+  .choice.wrong{border-color:var(--ng);background:rgba(239,68,68,.15);}
+  .explain{margin-top:14px;padding:12px;border-left:3px solid var(--accent);background:#0b1220;
+    border-radius:0 8px 8px 0;font-size:.9rem;display:none;}
+  .explain.show{display:block;}
+  .center{text-align:center;}
+  .big{font-size:2rem;font-weight:800;}
+  .hidden{display:none;}
+  .finish-cat{font-size:.85rem;color:var(--muted);margin-top:12px;text-align:left;}
+  .finish-cat div{margin:2px 0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>☁️ SAP-C02 サービス名クイズ</h1>
+  <div class="sub">「このサービスは何をする？」を4択で。AWS Solutions Architect Professional 対策の基礎編。</div>
+
+  <!-- スタート画面 -->
+  <div id="start" class="panel">
+    <div class="row" style="margin-bottom:12px;">
+      <label>モード</label>
+      <select id="modeSel">
+        <option value="normal" selected>通常（出題数ぶん解く）</option>
+        <option value="survival">サバイバル（1問間違えるまで）</option>
+      </select>
+    </div>
+    <div class="row" style="margin-bottom:12px;">
+      <label>カテゴリ</label>
+      <select id="catSel"></select>
+      <label id="countLabel">出題数</label>
+      <select id="countSel">
+        <option value="10">10問</option>
+        <option value="20">20問</option>
+        <option value="0" selected>全部</option>
+      </select>
+    </div>
+    <div class="row">
+      <button class="primary" id="startBtn">スタート ▶</button>
+      <span class="sub" id="poolInfo"></span>
+    </div>
+  </div>
+
+  <!-- クイズ画面 -->
+  <div id="quiz" class="panel hidden">
+    <div class="stat">
+      <span>進捗 <b id="prog">0 / 0</b></span>
+      <span>正解 <b id="score">0</b></span>
+      <span>正答率 <b id="rate">0%</b></span>
+    </div>
+    <div class="bar"><i id="progbar"></i></div>
+    <div class="qcat" id="qcat"></div>
+    <div class="qtext" id="qtext"></div>
+    <div class="choices" id="choices"></div>
+    <div class="explain" id="explain"></div>
+    <div class="row" style="margin-top:14px;">
+      <button class="primary hidden" id="nextBtn">次へ ▶</button>
+      <button id="quitBtn">ここまでで結果を見る</button>
+    </div>
+  </div>
+
+  <!-- 結果画面 -->
+  <div id="result" class="panel hidden center">
+    <div class="sub">結果</div>
+    <div class="big" id="finalRate">0%</div>
+    <div id="finalScore" class="sub"></div>
+    <div class="finish-cat" id="catBreak"></div>
+    <div class="row center" style="justify-content:center;margin-top:16px;">
+      <button class="primary" id="retryWrongBtn">間違いだけ復習 🔁</button>
+      <button id="againBtn">最初から</button>
+    </div>
+  </div>
+
+  <!-- 学習データ（マイデータ） -->
+  <div id="mydata" class="panel">
+    <div class="row" style="justify-content:space-between;">
+      <strong>📊 マイ学習データ</strong>
+      <span class="sub" id="dataSummary"></span>
+    </div>
+    <div class="bar"><i id="overallbar" style="background:var(--ok)"></i></div>
+    <div id="analysis" class="finish-cat"></div>
+    <div class="row" style="margin-top:14px;">
+      <button id="analyzeBtn">弱点を分析 🔍</button>
+      <button id="exportBtn">データ書き出し（JSON）💾</button>
+      <button id="clearBtn" style="border-color:var(--ng);color:var(--ng)">履歴を消す 🗑</button>
+    </div>
+    <div class="sub" style="margin-top:8px;">回答は自動でこのブラウザに記録されます（localStorage）。分析は「書き出したJSON」を渡せば、より深く見られます。</div>
+  </div>
+
+  <div class="sub center" style="margin-top:8px;">問題データは本ファイルに埋め込み済み（1ファイルで動作）。学習履歴はこのブラウザ内のみに保存（共有ファイルには含まれません）。</div>
+</div>
+
+<script id="quizdata" type="application/json">
+{
+"meta": {
+"title": "SAP-C02 サービス名クイズ",
+"created": "2026-10-07"
+},
+"questions": [
+{
+"id": "iot1",
+"cat": "IoT",
+"svc": "AWS IoT Core",
+"q": "AWS IoT Core は何をするサービス？",
+"choices": [
+{
+"text": "IoTデバイスをクラウドに安全に接続・管理しメッセージをルーティング(MQTT等)",
+"svc": "AWS IoT Core"
+},
+{
+"text": "エッジ(デバイス側)でLambda/MLをローカル実行し、オフラインでも動かす",
+"svc": "AWS IoT Greengrass"
+},
+{
+"text": "IoTデバイス群のセキュリティ監査・異常検知",
+"svc": "AWS IoT Device Defender"
+},
+{
+"text": "大量IoTデバイスの登録・整理・監視・リモート管理(フリート管理)",
+"svc": "AWS IoT Device Management"
+}
+],
+"answer": 0
+},
+{
+"id": "iot2",
+"cat": "IoT",
+"svc": "AWS IoT Greengrass",
+"q": "AWS IoT Greengrass は何をするサービス？",
+"choices": [
+{
+"text": "エッジ(デバイス側)でLambda/MLをローカル実行し、オフラインでも動かす",
+"svc": "AWS IoT Greengrass"
+},
+{
+"text": "IoTデバイスをクラウドに安全に接続・管理しメッセージをルーティング(MQTT等)",
+"svc": "AWS IoT Core"
+},
+{
+"text": "産業機器(工場等)のデータを収集・構造化・分析",
+"svc": "AWS IoT SiteWise"
+},
+{
+"text": "大量IoTデバイスの登録・整理・監視・リモート管理(フリート管理)",
+"svc": "AWS IoT Device Management"
+}
+],
+"answer": 0
+},
+{
+"id": "iot3",
+"cat": "IoT",
+"svc": "AWS IoT Device Defender",
+"q": "AWS IoT Device Defender は何をするサービス？",
+"choices": [
+{
+"text": "IoTデバイス群のセキュリティ監査・異常検知",
+"svc": "AWS IoT Device Defender"
+},
+{
+"text": "複数IoTセンサーのデータからイベント(状態変化)を検知し対応を起動",
+"svc": "AWS IoT Events"
+},
+{
+"text": "エッジ(デバイス側)でLambda/MLをローカル実行し、オフラインでも動かす",
+"svc": "AWS IoT Greengrass"
+},
+{
+"text": "産業機器(工場等)のデータを収集・構造化・分析",
+"svc": "AWS IoT SiteWise"
+}
+],
+"answer": 0
+},
+{
+"id": "iot4",
+"cat": "IoT",
+"svc": "AWS IoT Device Management",
+"q": "AWS IoT Device Management は何をするサービス？",
+"choices": [
+{
+"text": "大量IoTデバイスの登録・整理・監視・リモート管理(フリート管理)",
+"svc": "AWS IoT Device Management"
+},
+{
+"text": "IoTデバイスをクラウドに安全に接続・管理しメッセージをルーティング(MQTT等)",
+"svc": "AWS IoT Core"
+},
+{
+"text": "IoTデバイス群のセキュリティ監査・異常検知",
+"svc": "AWS IoT Device Defender"
+},
+{
+"text": "エッジ(デバイス側)でLambda/MLをローカル実行し、オフラインでも動かす",
+"svc": "AWS IoT Greengrass"
+}
+],
+"answer": 0
+},
+{
+"id": "iot5",
+"cat": "IoT",
+"svc": "AWS IoT SiteWise",
+"q": "AWS IoT SiteWise は何をするサービス？",
+"choices": [
+{
+"text": "産業機器(工場等)のデータを収集・構造化・分析",
+"svc": "AWS IoT SiteWise"
+},
+{
+"text": "エッジ(デバイス側)でLambda/MLをローカル実行し、オフラインでも動かす",
+"svc": "AWS IoT Greengrass"
+},
+{
+"text": "IoTデバイス群のセキュリティ監査・異常検知",
+"svc": "AWS IoT Device Defender"
+},
+{
+"text": "大量IoTデバイスの登録・整理・監視・リモート管理(フリート管理)",
+"svc": "AWS IoT Device Management"
+}
+],
+"answer": 0
+},
+{
+"id": "iot6",
+"cat": "IoT",
+"svc": "AWS IoT Events",
+"q": "AWS IoT Events は何をするサービス？",
+"choices": [
+{
+"text": "複数IoTセンサーのデータからイベント(状態変化)を検知し対応を起動",
+"svc": "AWS IoT Events"
+},
+{
+"text": "産業機器(工場等)のデータを収集・構造化・分析",
+"svc": "AWS IoT SiteWise"
+},
+{
+"text": "IoTデバイスをクラウドに安全に接続・管理しメッセージをルーティング(MQTT等)",
+"svc": "AWS IoT Core"
+},
+{
+"text": "大量IoTデバイスの登録・整理・監視・リモート管理(フリート管理)",
+"svc": "AWS IoT Device Management"
+}
+],
+"answer": 0
+},
+{
+"id": "med1",
+"cat": "その他",
+"svc": "Amazon Elastic Transcoder",
+"q": "Amazon Elastic Transcoder は何をするサービス？",
+"choices": [
+{
+"text": "動画を各デバイス向けにトランスコード(フォーマット変換)",
+"svc": "Amazon Elastic Transcoder"
+},
+{
+"text": "Web/モバイルのフルスタックアプリを素早く構築・ホスティング",
+"svc": "AWS Amplify"
+},
+{
+"text": "実機のモバイル端末/ブラウザでアプリをテストできるクラウドテスト基盤",
+"svc": "AWS Device Farm"
+},
+{
+"text": "Hyperledger/Ethereum等のブロックチェーンネットワークをマネージドで構築",
+"svc": "Amazon Managed Blockchain"
+}
+],
+"answer": 0
+},
+{
+"id": "o1",
+"cat": "その他",
+"svc": "Amazon SES",
+"q": "Amazon SES (Simple Email Service) は何をするサービス？",
+"choices": [
+{
+"text": "大量のトランザクション/マーケティングメールを送受信",
+"svc": "Amazon SES"
+},
+{
+"text": "Hyperledger/Ethereum等のブロックチェーンネットワークをマネージドで構築",
+"svc": "Amazon Managed Blockchain"
+},
+{
+"text": "基盤モデル(FM)をAPIで利用する生成AIサービス",
+"svc": "Amazon Bedrock"
+},
+{
+"text": "メール/SMS/プッシュ等マルチチャネルの顧客向け配信・分析",
+"svc": "Amazon Pinpoint"
+}
+],
+"answer": 0
+},
+{
+"id": "o10",
+"cat": "その他",
+"svc": "VMware Cloud on AWS",
+"q": "VMware Cloud on AWS は何をするサービス？",
+"choices": [
+{
+"text": "既存のVMware vSphereワークロードをそのままAWS上で動かし拡張/移行",
+"svc": "VMware Cloud on AWS"
+},
+{
+"text": "デスクトップアプリをブラウザにストリーミング配信",
+"svc": "Amazon AppStream 2.0"
+},
+{
+"text": "Hyperledger/Ethereum等のブロックチェーンネットワークをマネージドで構築",
+"svc": "Amazon Managed Blockchain"
+},
+{
+"text": "機械学習モデルの構築・学習・デプロイを一気通貫で行う",
+"svc": "Amazon SageMaker"
+}
+],
+"answer": 0
+},
+{
+"id": "o2",
+"cat": "その他",
+"svc": "Amazon Pinpoint",
+"q": "Amazon Pinpoint は何をするサービス？",
+"choices": [
+{
+"text": "メール/SMS/プッシュ等マルチチャネルの顧客向け配信・分析",
+"svc": "Amazon Pinpoint"
+},
+{
+"text": "基盤モデル(FM)をAPIで利用する生成AIサービス",
+"svc": "Amazon Bedrock"
+},
+{
+"text": "実機のモバイル端末/ブラウザでアプリをテストできるクラウドテスト基盤",
+"svc": "AWS Device Farm"
+},
+{
+"text": "動画を各デバイス向けにトランスコード(フォーマット変換)",
+"svc": "Amazon Elastic Transcoder"
+}
+],
+"answer": 0
+},
+{
+"id": "o3",
+"cat": "その他",
+"svc": "Amazon WorkSpaces",
+"q": "Amazon WorkSpaces は何をするサービス？",
+"choices": [
+{
+"text": "クラウド上の仮想デスクトップ(VDI/DaaS)",
+"svc": "Amazon WorkSpaces"
+},
+{
+"text": "動画ファイルを各デバイス向けにトランスコード・フォーマット変換",
+"svc": "AWS Elemental MediaConvert"
+},
+{
+"text": "Hyperledger/Ethereum等のブロックチェーンネットワークをマネージドで構築",
+"svc": "Amazon Managed Blockchain"
+},
+{
+"text": "IoTデバイスをクラウドに安全に接続・管理しメッセージをルーティング(MQTT等)",
+"svc": "AWS IoT Core"
+}
+],
+"answer": 0
+},
+{
+"id": "o4",
+"cat": "その他",
+"svc": "Amazon AppStream 2.0",
+"q": "Amazon AppStream 2.0 は何をするサービス？",
+"choices": [
+{
+"text": "デスクトップアプリをブラウザにストリーミング配信",
+"svc": "Amazon AppStream 2.0"
+},
+{
+"text": "Web/モバイルのフルスタックアプリを素早く構築・ホスティング",
+"svc": "AWS Amplify"
+},
+{
+"text": "Hyperledger/Ethereum等のブロックチェーンネットワークをマネージドで構築",
+"svc": "Amazon Managed Blockchain"
+},
+{
+"text": "基盤モデル(FM)をAPIで利用する生成AIサービス",
+"svc": "Amazon Bedrock"
+}
+],
+"answer": 0
+},
+{
+"id": "o5",
+"cat": "その他",
+"svc": "AWS Amplify",
+"q": "AWS Amplify は何をするサービス？",
+"choices": [
+{
+"text": "Web/モバイルのフルスタックアプリを素早く構築・ホスティング",
+"svc": "AWS Amplify"
+},
+{
+"text": "Hyperledger/Ethereum等のブロックチェーンネットワークをマネージドで構築",
+"svc": "Amazon Managed Blockchain"
+},
+{
+"text": "機械学習モデルの構築・学習・デプロイを一気通貫で行う",
+"svc": "Amazon SageMaker"
+},
+{
+"text": "実機のモバイル端末/ブラウザでアプリをテストできるクラウドテスト基盤",
+"svc": "AWS Device Farm"
+}
+],
+"answer": 0
+},
+{
+"id": "o6",
+"cat": "その他",
+"svc": "Amazon SageMaker",
+"q": "Amazon SageMaker は何をするサービス？",
+"choices": [
+{
+"text": "機械学習モデルの構築・学習・デプロイを一気通貫で行う",
+"svc": "Amazon SageMaker"
+},
+{
+"text": "既存のVMware vSphereワークロードをそのままAWS上で動かし拡張/移行",
+"svc": "VMware Cloud on AWS"
+},
+{
+"text": "Web/モバイルのフルスタックアプリを素早く構築・ホスティング",
+"svc": "AWS Amplify"
+},
+{
+"text": "実機のモバイル端末/ブラウザでアプリをテストできるクラウドテスト基盤",
+"svc": "AWS Device Farm"
+}
+],
+"answer": 0
+},
+{
+"id": "o7",
+"cat": "その他",
+"svc": "Amazon Bedrock",
+"q": "Amazon Bedrock は何をするサービス？",
+"choices": [
+{
+"text": "基盤モデル(FM)をAPIで利用する生成AIサービス",
+"svc": "Amazon Bedrock"
+},
+{
+"text": "Hyperledger/Ethereum等のブロックチェーンネットワークをマネージドで構築",
+"svc": "Amazon Managed Blockchain"
+},
+{
+"text": "IoTデバイスをクラウドに安全に接続・管理しメッセージをルーティング(MQTT等)",
+"svc": "AWS IoT Core"
+},
+{
+"text": "クラウド上の仮想デスクトップ(VDI/DaaS)",
+"svc": "Amazon WorkSpaces"
+}
+],
+"answer": 0
+},
+{
+"id": "o8",
+"cat": "その他",
+"svc": "AWS Elemental MediaConvert",
+"q": "AWS Elemental MediaConvert は何をするサービス？",
+"choices": [
+{
+"text": "動画ファイルを各デバイス向けにトランスコード・フォーマット変換",
+"svc": "AWS Elemental MediaConvert"
+},
+{
+"text": "大量のトランザクション/マーケティングメールを送受信",
+"svc": "Amazon SES"
+},
+{
+"text": "デスクトップアプリをブラウザにストリーミング配信",
+"svc": "Amazon AppStream 2.0"
+},
+{
+"text": "基盤モデル(FM)をAPIで利用する生成AIサービス",
+"svc": "Amazon Bedrock"
+}
+],
+"answer": 0
+},
+{
+"id": "o9",
+"cat": "その他",
+"svc": "AWS IoT Core",
+"q": "AWS IoT Core は何をするサービス？",
+"choices": [
+{
+"text": "大量のIoTデバイスをクラウドに安全に接続・管理しメッセージをルーティング",
+"svc": "AWS IoT Core"
+},
+{
+"text": "既存のVMware vSphereワークロードをそのままAWS上で動かし拡張/移行",
+"svc": "VMware Cloud on AWS"
+},
+{
+"text": "Hyperledger/Ethereum等のブロックチェーンネットワークをマネージドで構築",
+"svc": "Amazon Managed Blockchain"
+},
+{
+"text": "機械学習モデルの構築・学習・デプロイを一気通貫で行う",
+"svc": "Amazon SageMaker"
+}
+],
+"answer": 0
+},
+{
+"id": "x11",
+"cat": "その他",
+"svc": "Amazon Managed Blockchain",
+"q": "Amazon Managed Blockchain は何をするサービス？",
+"choices": [
+{
+"text": "Hyperledger/Ethereum等のブロックチェーンネットワークをマネージドで構築",
+"svc": "Amazon Managed Blockchain"
+},
+{
+"text": "デスクトップアプリをブラウザにストリーミング配信",
+"svc": "Amazon AppStream 2.0"
+},
+{
+"text": "Web/モバイルのフルスタックアプリを素早く構築・ホスティング",
+"svc": "AWS Amplify"
+},
+{
+"text": "動画を各デバイス向けにトランスコード(フォーマット変換)",
+"svc": "Amazon Elastic Transcoder"
+}
+],
+"answer": 0
+},
+{
+"id": "x13",
+"cat": "その他",
+"svc": "AWS Device Farm",
+"q": "AWS Device Farm は何をするサービス？",
+"choices": [
+{
+"text": "実機のモバイル端末/ブラウザでアプリをテストできるクラウドテスト基盤",
+"svc": "AWS Device Farm"
+},
+{
+"text": "デスクトップアプリをブラウザにストリーミング配信",
+"svc": "Amazon AppStream 2.0"
+},
+{
+"text": "動画を各デバイス向けにトランスコード(フォーマット変換)",
+"svc": "Amazon Elastic Transcoder"
+},
+{
+"text": "Hyperledger/Ethereum等のブロックチェーンネットワークをマネージドで構築",
+"svc": "Amazon Managed Blockchain"
+}
+],
+"answer": 0
+},
+{
+"id": "a1",
+"cat": "アプリ統合",
+"svc": "Amazon SQS",
+"q": "Amazon SQS は何をするサービス？",
+"choices": [
+{
+"text": "コンポーネントを疎結合化するフルマネージドなメッセージキュー",
+"svc": "Amazon SQS"
+},
+{
+"text": "ActiveMQ/RabbitMQ互換のマネージドメッセージブローカー(標準プロトコル資産向け)",
+"svc": "Amazon MQ"
+},
+{
+"text": "コード主導の分散ワークフロー調整(旧世代。新規はStep Functions推奨)",
+"svc": "Amazon SWF"
+},
+{
+"text": "AWS/SaaS/自作アプリのイベントをルールでターゲットへルーティングするイベントバス",
+"svc": "Amazon EventBridge"
+}
+],
+"answer": 0
+},
+{
+"id": "a2",
+"cat": "アプリ統合",
+"svc": "Amazon SNS",
+"q": "Amazon SNS は何をするサービス？",
+"choices": [
+{
+"text": "1つのメッセージを複数の宛先に同時配信するPub/Sub(ファンアウト)",
+"svc": "Amazon SNS"
+},
+{
+"text": "SaaS(Salesforce等)とAWS間でノーコードにデータ連携",
+"svc": "Amazon AppFlow"
+},
+{
+"text": "AWS/SaaS/自作アプリのイベントをルールでターゲットへルーティングするイベントバス",
+"svc": "Amazon EventBridge"
+},
+{
+"text": "複数のAWSサービス呼び出しを状態機械として組み合わせるワークフロー",
+"svc": "AWS Step Functions"
+}
+],
+"answer": 0
+},
+{
+"id": "a3",
+"cat": "アプリ統合",
+"svc": "Amazon EventBridge",
+"q": "Amazon EventBridge は何をするサービス？",
+"choices": [
+{
+"text": "AWS/SaaS/自作アプリのイベントをルールでターゲットへルーティングするイベントバス",
+"svc": "Amazon EventBridge"
+},
+{
+"text": "コード主導の分散ワークフロー調整(旧世代。新規はStep Functions推奨)",
+"svc": "Amazon SWF"
+},
+{
+"text": "複数のAWSサービス呼び出しを状態機械として組み合わせるワークフロー",
+"svc": "AWS Step Functions"
+},
+{
+"text": "コンポーネントを疎結合化するフルマネージドなメッセージキュー",
+"svc": "Amazon SQS"
+}
+],
+"answer": 0
+},
+{
+"id": "a4",
+"cat": "アプリ統合",
+"svc": "AWS Step Functions",
+"q": "AWS Step Functions は何をするサービス？",
+"choices": [
+{
+"text": "複数のAWSサービス呼び出しを状態機械として組み合わせるワークフロー",
+"svc": "AWS Step Functions"
+},
+{
+"text": "コード主導の分散ワークフロー調整(旧世代。新規はStep Functions推奨)",
+"svc": "Amazon SWF"
+},
+{
+"text": "SaaS(Salesforce等)とAWS間でノーコードにデータ連携",
+"svc": "Amazon AppFlow"
+},
+{
+"text": "1つのメッセージを複数の宛先に同時配信するPub/Sub(ファンアウト)",
+"svc": "Amazon SNS"
+}
+],
+"answer": 0
+},
+{
+"id": "a5",
+"cat": "アプリ統合",
+"svc": "Amazon MQ",
+"q": "Amazon MQ は何をするサービス？",
+"choices": [
+{
+"text": "ActiveMQ/RabbitMQ互換のマネージドメッセージブローカー(標準プロトコル資産向け)",
+"svc": "Amazon MQ"
+},
+{
+"text": "マネージドなGraphQL/リアルタイムAPIを構築(複数データソースを集約)",
+"svc": "AWS AppSync"
+},
+{
+"text": "AWS/SaaS/自作アプリのイベントをルールでターゲットへルーティングするイベントバス",
+"svc": "Amazon EventBridge"
+},
+{
+"text": "1つのメッセージを複数の宛先に同時配信するPub/Sub(ファンアウト)",
+"svc": "Amazon SNS"
+}
+],
+"answer": 0
+},
+{
+"id": "a6",
+"cat": "アプリ統合",
+"svc": "Amazon AppFlow",
+"q": "Amazon AppFlow は何をするサービス？",
+"choices": [
+{
+"text": "SaaS(Salesforce等)とAWS間でノーコードにデータ連携",
+"svc": "Amazon AppFlow"
+},
+{
+"text": "複数のAWSサービス呼び出しを状態機械として組み合わせるワークフロー",
+"svc": "AWS Step Functions"
+},
+{
+"text": "コード主導の分散ワークフロー調整(旧世代。新規はStep Functions推奨)",
+"svc": "Amazon SWF"
+},
+{
+"text": "マネージドなGraphQL/リアルタイムAPIを構築(複数データソースを集約)",
+"svc": "AWS AppSync"
+}
+],
+"answer": 0
+},
+{
+"id": "a7",
+"cat": "アプリ統合",
+"svc": "Amazon SWF",
+"q": "Amazon SWF (Simple Workflow Service) は何をするサービス？",
+"choices": [
+{
+"text": "コード主導の分散ワークフロー調整(旧世代。新規はStep Functions推奨)",
+"svc": "Amazon SWF"
+},
+{
+"text": "複数のAWSサービス呼び出しを状態機械として組み合わせるワークフロー",
+"svc": "AWS Step Functions"
+},
+{
+"text": "マネージドなGraphQL/リアルタイムAPIを構築(複数データソースを集約)",
+"svc": "AWS AppSync"
+},
+{
+"text": "コンポーネントを疎結合化するフルマネージドなメッセージキュー",
+"svc": "Amazon SQS"
+}
+],
+"answer": 0
+},
+{
+"id": "x1",
+"cat": "アプリ統合",
+"svc": "AWS AppSync",
+"q": "AWS AppSync は何をするサービス？",
+"choices": [
+{
+"text": "マネージドなGraphQL/リアルタイムAPIを構築(複数データソースを集約)",
+"svc": "AWS AppSync"
+},
+{
+"text": "複数のAWSサービス呼び出しを状態機械として組み合わせるワークフロー",
+"svc": "AWS Step Functions"
+},
+{
+"text": "ActiveMQ/RabbitMQ互換のマネージドメッセージブローカー(標準プロトコル資産向け)",
+"svc": "Amazon MQ"
+},
+{
+"text": "SaaS(Salesforce等)とAWS間でノーコードにデータ連携",
+"svc": "Amazon AppFlow"
+}
+],
+"answer": 0
+},
+{
+"id": "cost1",
+"cat": "コスト管理",
+"svc": "AWS Cost Explorer",
+"q": "AWS Cost Explorer は何をするサービス？",
+"choices": [
+{
+"text": "コストと使用量を可視化・分析し、節約推奨や予測を得る",
+"svc": "AWS Cost Explorer"
+},
+{
+"text": "最も詳細なコスト・使用量の生データをS3に出力(Athena等で分析)",
+"svc": "AWS Cost and Usage Report"
+},
+{
+"text": "1年/3年の利用コミットでコンピュート料金を最大72%割引",
+"svc": "Savings Plans"
+},
+{
+"text": "予算を設定し、超過/しきい値でアラートを出す",
+"svc": "AWS Budgets"
+}
+],
+"answer": 0
+},
+{
+"id": "cost2",
+"cat": "コスト管理",
+"svc": "AWS Budgets",
+"q": "AWS Budgets は何をするサービス？",
+"choices": [
+{
+"text": "予算を設定し、超過/しきい値でアラートを出す",
+"svc": "AWS Budgets"
+},
+{
+"text": "コストと使用量を可視化・分析し、節約推奨や予測を得る",
+"svc": "AWS Cost Explorer"
+},
+{
+"text": "1年/3年の利用コミットでコンピュート料金を最大72%割引",
+"svc": "Savings Plans"
+},
+{
+"text": "機械学習で異常なコスト増を検知・通知",
+"svc": "AWS Cost Anomaly Detection"
+}
+],
+"answer": 0
+},
+{
+"id": "cost3",
+"cat": "コスト管理",
+"svc": "Savings Plans",
+"q": "Savings Plans は何をするもの？",
+"choices": [
+{
+"text": "1年/3年の利用コミットでコンピュート料金を最大72%割引",
+"svc": "Savings Plans"
+},
+{
+"text": "最も詳細なコスト・使用量の生データをS3に出力(Athena等で分析)",
+"svc": "AWS Cost and Usage Report"
+},
+{
+"text": "機械学習で異常なコスト増を検知・通知",
+"svc": "AWS Cost Anomaly Detection"
+},
+{
+"text": "コストと使用量を可視化・分析し、節約推奨や予測を得る",
+"svc": "AWS Cost Explorer"
+}
+],
+"answer": 0
+},
+{
+"id": "cost4",
+"cat": "コスト管理",
+"svc": "AWS Cost and Usage Report",
+"q": "AWS Cost and Usage Report (CUR) は何をするもの？",
+"choices": [
+{
+"text": "最も詳細なコスト・使用量の生データをS3に出力(Athena等で分析)",
+"svc": "AWS Cost and Usage Report"
+},
+{
+"text": "コストと使用量を可視化・分析し、節約推奨や予測を得る",
+"svc": "AWS Cost Explorer"
+},
+{
+"text": "1年/3年の利用コミットでコンピュート料金を最大72%割引",
+"svc": "Savings Plans"
+},
+{
+"text": "予算を設定し、超過/しきい値でアラートを出す",
+"svc": "AWS Budgets"
+}
+],
+"answer": 0
+},
+{
+"id": "cost5",
+"cat": "コスト管理",
+"svc": "AWS Cost Anomaly Detection",
+"q": "AWS Cost Anomaly Detection は何をするサービス？",
+"choices": [
+{
+"text": "機械学習で異常なコスト増を検知・通知",
+"svc": "AWS Cost Anomaly Detection"
+},
+{
+"text": "予算を設定し、超過/しきい値でアラートを出す",
+"svc": "AWS Budgets"
+},
+{
+"text": "コストと使用量を可視化・分析し、節約推奨や予測を得る",
+"svc": "AWS Cost Explorer"
+},
+{
+"text": "1年/3年の利用コミットでコンピュート料金を最大72%割引",
+"svc": "Savings Plans"
+}
+],
+"answer": 0
+},
+{
+"id": "c1",
+"cat": "コンピューティング",
+"svc": "Amazon EC2",
+"q": "Amazon EC2 は何をするサービス？",
+"choices": [
+{
+"text": "必要なときに起動できる、サイズ変更可能な仮想サーバー(コンピュート容量)",
+"svc": "Amazon EC2"
+},
+{
+"text": "AWSのインフラ・API・ツールをオンプレ拠点に持ち込むハイブリッドサービス",
+"svc": "AWS Outposts"
+},
+{
+"text": "自前のインフラ(オンプレ等)上でKubernetesクラスタを作成・運用する",
+"svc": "Amazon EKS Anywhere"
+},
+{
+"text": "EKSが使うのと同じKubernetesディストリビューションをOSSとして提供(どこでも使える)",
+"svc": "Amazon EKS Distro"
+}
+],
+"answer": 0
+},
+{
+"id": "c10",
+"cat": "コンピューティング",
+"svc": "AWS Outposts",
+"q": "AWS Outposts は何をするサービス？",
+"choices": [
+{
+"text": "AWSのインフラ・API・ツールをオンプレ拠点に持ち込むハイブリッドサービス",
+"svc": "AWS Outposts"
+},
+{
+"text": "Dockerコンテナイメージの保存・管理・デプロイ(レジストリ)",
+"svc": "Amazon ECR"
+},
+{
+"text": "AWS独自のコンテナオーケストレーション(Dockerコンテナの実行・スケール)",
+"svc": "Amazon ECS"
+},
+{
+"text": "顧客管理のオンプレ基盤上でECS(コンテナ)を実行する",
+"svc": "Amazon ECS Anywhere"
+}
+],
+"answer": 0
+},
+{
+"id": "c11",
+"cat": "コンピューティング",
+"svc": "Amazon Lightsail",
+"q": "Amazon Lightsail は何をするサービス？",
+"choices": [
+{
+"text": "低く予測しやすい定額でVM・ストレージ・DB・ネットワークを一式提供(簡易)",
+"svc": "Amazon Lightsail"
+},
+{
+"text": "使用状況から最適なコンピュートリソース構成を推奨しコスト/性能を改善",
+"svc": "AWS Compute Optimizer"
+},
+{
+"text": "コンテナ化Webアプリをフルマネージドで構築・実行(開発者向けにシンプル)",
+"svc": "AWS App Runner"
+},
+{
+"text": "サーバー管理なしでコードを実行し、使った分だけ課金するサーバーレス実行基盤",
+"svc": "AWS Lambda"
+}
+],
+"answer": 0
+},
+{
+"id": "c12",
+"cat": "コンピューティング",
+"svc": "AWS App Runner",
+"q": "AWS App Runner は何をするサービス？",
+"choices": [
+{
+"text": "コンテナ化Webアプリをフルマネージドで構築・実行(開発者向けにシンプル)",
+"svc": "AWS App Runner"
+},
+{
+"text": "AWS独自のコンテナオーケストレーション(Dockerコンテナの実行・スケール)",
+"svc": "Amazon ECS"
+},
+{
+"text": "AWSのインフラ・API・ツールをオンプレ拠点に持ち込むハイブリッドサービス",
+"svc": "AWS Outposts"
+},
+{
+"text": "顧客管理のオンプレ基盤上でECS(コンテナ)を実行する",
+"svc": "Amazon ECS Anywhere"
+}
+],
+"answer": 0
+},
+{
+"id": "c13",
+"cat": "コンピューティング",
+"svc": "EC2 Image Builder",
+"q": "EC2 Image Builder は何をするサービス？",
+"choices": [
+{
+"text": "セキュアなLinux/Windowsサーバーイメージ(AMI)を自動で作成・保守",
+"svc": "EC2 Image Builder"
+},
+{
+"text": "AWSのインフラ・API・ツールをオンプレ拠点に持ち込むハイブリッドサービス",
+"svc": "AWS Outposts"
+},
+{
+"text": "大量のバッチ計算ジョブを効率的に実行(必要なコンピュートを自動プロビジョニング)",
+"svc": "AWS Batch"
+},
+{
+"text": "必要なときに起動できる、サイズ変更可能な仮想サーバー(コンピュート容量)",
+"svc": "Amazon EC2"
+}
+],
+"answer": 0
+},
+{
+"id": "c14",
+"cat": "コンピューティング",
+"svc": "AWS Compute Optimizer",
+"q": "AWS Compute Optimizer は何をするサービス？",
+"choices": [
+{
+"text": "使用状況から最適なコンピュートリソース構成を推奨しコスト/性能を改善",
+"svc": "AWS Compute Optimizer"
+},
+{
+"text": "Webアプリをデプロイするだけで裏のインフラを自動構成・スケールするPaaS",
+"svc": "AWS Elastic Beanstalk"
+},
+{
+"text": "低く予測しやすい定額でVM・ストレージ・DB・ネットワークを一式提供(簡易)",
+"svc": "Amazon Lightsail"
+},
+{
+"text": "コンテナ化Webアプリをフルマネージドで構築・実行(開発者向けにシンプル)",
+"svc": "AWS App Runner"
+}
+],
+"answer": 0
+},
+{
+"id": "c15",
+"cat": "コンピューティング",
+"svc": "AWS Local Zones",
+"q": "AWS Local Zones は何をするサービス？",
+"choices": [
+{
+"text": "主要都市などユーザーに近い場所でコンピュート/ストレージを提供し低レイテンシ化",
+"svc": "AWS Local Zones"
+},
+{
+"text": "自前のインフラ(オンプレ等)上でKubernetesクラスタを作成・運用する",
+"svc": "Amazon EKS Anywhere"
+},
+{
+"text": "AWSのインフラ・API・ツールをオンプレ拠点に持ち込むハイブリッドサービス",
+"svc": "AWS Outposts"
+},
+{
+"text": "低く予測しやすい定額でVM・ストレージ・DB・ネットワークを一式提供(簡易)",
+"svc": "Amazon Lightsail"
+}
+],
+"answer": 0
+},
+{
+"id": "c16",
+"cat": "コンピューティング",
+"svc": "AWS Wavelength",
+"q": "AWS Wavelength は何をするサービス？",
+"choices": [
+{
+"text": "通信事業者の5Gネットワーク内にAWSを配置し超低レイテンシを実現",
+"svc": "AWS Wavelength"
+},
+{
+"text": "大量のバッチ計算ジョブを効率的に実行(必要なコンピュートを自動プロビジョニング)",
+"svc": "AWS Batch"
+},
+{
+"text": "使用状況から最適なコンピュートリソース構成を推奨しコスト/性能を改善",
+"svc": "AWS Compute Optimizer"
+},
+{
+"text": "サーバー/クラスタ管理なしでコンテナを動かすサーバーレスコンピュートエンジン",
+"svc": "AWS Fargate"
+}
+],
+"answer": 0
+},
+{
+"id": "c2",
+"cat": "コンピューティング",
+"svc": "AWS Lambda",
+"q": "AWS Lambda は何をするサービス？",
+"choices": [
+{
+"text": "サーバー管理なしでコードを実行し、使った分だけ課金するサーバーレス実行基盤",
+"svc": "AWS Lambda"
+},
+{
+"text": "必要なときに起動できる、サイズ変更可能な仮想サーバー(コンピュート容量)",
+"svc": "Amazon EC2"
+},
+{
+"text": "フルマネージドのKubernetes(コントロールプレーン運用不要)",
+"svc": "Amazon EKS"
+},
+{
+"text": "定義した条件でEC2台数を自動で増減し可用性を保つ",
+"svc": "Amazon EC2 Auto Scaling"
+}
+],
+"answer": 0
+},
+{
+"id": "c3",
+"cat": "コンピューティング",
+"svc": "Amazon ECS",
+"q": "Amazon ECS は何をするサービス？",
+"choices": [
+{
+"text": "AWS独自のコンテナオーケストレーション(Dockerコンテナの実行・スケール)",
+"svc": "Amazon ECS"
+},
+{
+"text": "定義した条件でEC2台数を自動で増減し可用性を保つ",
+"svc": "Amazon EC2 Auto Scaling"
+},
+{
+"text": "主要都市などユーザーに近い場所でコンピュート/ストレージを提供し低レイテンシ化",
+"svc": "AWS Local Zones"
+},
+{
+"text": "セキュアなLinux/Windowsサーバーイメージ(AMI)を自動で作成・保守",
+"svc": "EC2 Image Builder"
+}
+],
+"answer": 0
+},
+{
+"id": "c4",
+"cat": "コンピューティング",
+"svc": "Amazon EKS",
+"q": "Amazon EKS は何をするサービス？",
+"choices": [
+{
+"text": "フルマネージドのKubernetes(コントロールプレーン運用不要)",
+"svc": "Amazon EKS"
+},
+{
+"text": "Webアプリをデプロイするだけで裏のインフラを自動構成・スケールするPaaS",
+"svc": "AWS Elastic Beanstalk"
+},
+{
+"text": "AWSのインフラ・API・ツールをオンプレ拠点に持ち込むハイブリッドサービス",
+"svc": "AWS Outposts"
+},
+{
+"text": "定義した条件でEC2台数を自動で増減し可用性を保つ",
+"svc": "Amazon EC2 Auto Scaling"
+}
+],
+"answer": 0
+},
+{
+"id": "c5",
+"cat": "コンピューティング",
+"svc": "AWS Fargate",
+"q": "AWS Fargate は何をするサービス？",
+"choices": [
+{
+"text": "サーバー/クラスタ管理なしでコンテナを動かすサーバーレスコンピュートエンジン",
+"svc": "AWS Fargate"
+},
+{
+"text": "AWSのインフラ・API・ツールをオンプレ拠点に持ち込むハイブリッドサービス",
+"svc": "AWS Outposts"
+},
+{
+"text": "自前のインフラ(オンプレ等)上でKubernetesクラスタを作成・運用する",
+"svc": "Amazon EKS Anywhere"
+},
+{
+"text": "顧客管理のオンプレ基盤上でECS(コンテナ)を実行する",
+"svc": "Amazon ECS Anywhere"
+}
+],
+"answer": 0
+},
+{
+"id": "c6",
+"cat": "コンピューティング",
+"svc": "Amazon ECR",
+"q": "Amazon ECR は何をするサービス？",
+"choices": [
+{
+"text": "Dockerコンテナイメージの保存・管理・デプロイ(レジストリ)",
+"svc": "Amazon ECR"
+},
+{
+"text": "EKSが使うのと同じKubernetesディストリビューションをOSSとして提供(どこでも使える)",
+"svc": "Amazon EKS Distro"
+},
+{
+"text": "顧客管理のオンプレ基盤上でECS(コンテナ)を実行する",
+"svc": "Amazon ECS Anywhere"
+},
+{
+"text": "自前のインフラ(オンプレ等)上でKubernetesクラスタを作成・運用する",
+"svc": "Amazon EKS Anywhere"
+}
+],
+"answer": 0
+},
+{
+"id": "c7",
+"cat": "コンピューティング",
+"svc": "Amazon EC2 Auto Scaling",
+"q": "Amazon EC2 Auto Scaling は何をするサービス？",
+"choices": [
+{
+"text": "定義した条件でEC2台数を自動で増減し可用性を保つ",
+"svc": "Amazon EC2 Auto Scaling"
+},
+{
+"text": "顧客管理のオンプレ基盤上でECS(コンテナ)を実行する",
+"svc": "Amazon ECS Anywhere"
+},
+{
+"text": "サーバー管理なしでコードを実行し、使った分だけ課金するサーバーレス実行基盤",
+"svc": "AWS Lambda"
+},
+{
+"text": "主要都市などユーザーに近い場所でコンピュート/ストレージを提供し低レイテンシ化",
+"svc": "AWS Local Zones"
+}
+],
+"answer": 0
+},
+{
+"id": "c8",
+"cat": "コンピューティング",
+"svc": "AWS Elastic Beanstalk",
+"q": "AWS Elastic Beanstalk は何をするサービス？",
+"choices": [
+{
+"text": "Webアプリをデプロイするだけで裏のインフラを自動構成・スケールするPaaS",
+"svc": "AWS Elastic Beanstalk"
+},
+{
+"text": "EKSが使うのと同じKubernetesディストリビューションをOSSとして提供(どこでも使える)",
+"svc": "Amazon EKS Distro"
+},
+{
+"text": "主要都市などユーザーに近い場所でコンピュート/ストレージを提供し低レイテンシ化",
+"svc": "AWS Local Zones"
+},
+{
+"text": "定義した条件でEC2台数を自動で増減し可用性を保つ",
+"svc": "Amazon EC2 Auto Scaling"
+}
+],
+"answer": 0
+},
+{
+"id": "c9",
+"cat": "コンピューティング",
+"svc": "AWS Batch",
+"q": "AWS Batch は何をするサービス？",
+"choices": [
+{
+"text": "大量のバッチ計算ジョブを効率的に実行(必要なコンピュートを自動プロビジョニング)",
+"svc": "AWS Batch"
+},
+{
+"text": "セキュアなLinux/Windowsサーバーイメージ(AMI)を自動で作成・保守",
+"svc": "EC2 Image Builder"
+},
+{
+"text": "AWS独自のコンテナオーケストレーション(Dockerコンテナの実行・スケール)",
+"svc": "Amazon ECS"
+},
+{
+"text": "フルマネージドのKubernetes(コントロールプレーン運用不要)",
+"svc": "Amazon EKS"
+}
+],
+"answer": 0
+},
+{
+"id": "y1",
+"cat": "コンピューティング",
+"svc": "Amazon ECS Anywhere",
+"q": "Amazon ECS Anywhere は何をするサービス？",
+"choices": [
+{
+"text": "顧客管理のオンプレ基盤上でECS(コンテナ)を実行する",
+"svc": "Amazon ECS Anywhere"
+},
+{
+"text": "フルマネージドのKubernetes(コントロールプレーン運用不要)",
+"svc": "Amazon EKS"
+},
+{
+"text": "必要なときに起動できる、サイズ変更可能な仮想サーバー(コンピュート容量)",
+"svc": "Amazon EC2"
+},
+{
+"text": "通信事業者の5Gネットワーク内にAWSを配置し超低レイテンシを実現",
+"svc": "AWS Wavelength"
+}
+],
+"answer": 0
+},
+{
+"id": "y2",
+"cat": "コンピューティング",
+"svc": "Amazon EKS Anywhere",
+"q": "Amazon EKS Anywhere は何をするサービス？",
+"choices": [
+{
+"text": "自前のインフラ(オンプレ等)上でKubernetesクラスタを作成・運用する",
+"svc": "Amazon EKS Anywhere"
+},
+{
+"text": "Webアプリをデプロイするだけで裏のインフラを自動構成・スケールするPaaS",
+"svc": "AWS Elastic Beanstalk"
+},
+{
+"text": "AWSのインフラ・API・ツールをオンプレ拠点に持ち込むハイブリッドサービス",
+"svc": "AWS Outposts"
+},
+{
+"text": "大量のバッチ計算ジョブを効率的に実行(必要なコンピュートを自動プロビジョニング)",
+"svc": "AWS Batch"
+}
+],
+"answer": 0
+},
+{
+"id": "y3",
+"cat": "コンピューティング",
+"svc": "Amazon EKS Distro",
+"q": "Amazon EKS Distro は何をするサービス？",
+"choices": [
+{
+"text": "EKSが使うのと同じKubernetesディストリビューションをOSSとして提供(どこでも使える)",
+"svc": "Amazon EKS Distro"
+},
+{
+"text": "使用状況から最適なコンピュートリソース構成を推奨しコスト/性能を改善",
+"svc": "AWS Compute Optimizer"
+},
+{
+"text": "サーバー管理なしでコードを実行し、使った分だけ課金するサーバーレス実行基盤",
+"svc": "AWS Lambda"
+},
+{
+"text": "サーバー/クラスタ管理なしでコンテナを動かすサーバーレスコンピュートエンジン",
+"svc": "AWS Fargate"
+}
+],
+"answer": 0
+},
+{
+"id": "s1",
+"cat": "ストレージ",
+"svc": "Amazon S3",
+"q": "Amazon S3 は何をするサービス？",
+"choices": [
+{
+"text": "無限にスケールするオブジェクトストレージ(耐久性11 9's)",
+"svc": "Amazon S3"
+},
+{
+"text": "サーバーをAWSへ継続レプリケーションし、災害時に素早く復旧(DR)",
+"svc": "AWS Elastic Disaster Recovery"
+},
+{
+"text": "オンプレのアプリをS3/Glacier/EBSにシームレス接続するハイブリッドストレージ",
+"svc": "AWS Storage Gateway"
+},
+{
+"text": "オンプレ⇄AWS間を高速・検証付きでコピーするオンラインデータ転送",
+"svc": "AWS DataSync"
+}
+],
+"answer": 0
+},
+{
+"id": "s2",
+"cat": "ストレージ",
+"svc": "Amazon EBS",
+"q": "Amazon EBS は何をするサービス？",
+"choices": [
+{
+"text": "EC2にアタッチする永続ブロックストレージ(仮想ディスク)",
+"svc": "Amazon EBS"
+},
+{
+"text": "オンプレのアプリをS3/Glacier/EBSにシームレス接続するハイブリッドストレージ",
+"svc": "AWS Storage Gateway"
+},
+{
+"text": "オンプレ⇄AWS間を高速・検証付きでコピーするオンラインデータ転送",
+"svc": "AWS DataSync"
+},
+{
+"text": "SFTP/FTPS/FTPで既存クライアントからS3/EFSへファイル転送(マネージド)",
+"svc": "AWS Transfer Family"
+}
+],
+"answer": 0
+},
+{
+"id": "s3",
+"cat": "ストレージ",
+"svc": "Amazon EFS",
+"q": "Amazon EFS は何をするサービス？",
+"choices": [
+{
+"text": "複数のLinux/EC2から同時マウントできるマネージドNFSファイルシステム",
+"svc": "Amazon EFS"
+},
+{
+"text": "オンプレ⇄AWS間を高速・検証付きでコピーするオンラインデータ転送",
+"svc": "AWS DataSync"
+},
+{
+"text": "オンプレのアプリをS3/Glacier/EBSにシームレス接続するハイブリッドストレージ",
+"svc": "AWS Storage Gateway"
+},
+{
+"text": "SFTP/FTPS/FTPで既存クライアントからS3/EFSへファイル転送(マネージド)",
+"svc": "AWS Transfer Family"
+}
+],
+"answer": 0
+},
+{
+"id": "s4",
+"cat": "ストレージ",
+"svc": "Amazon S3 Glacier",
+"q": "Amazon S3 Glacier / Deep Archive は何をするサービス？",
+"choices": [
+{
+"text": "低RTO不要の長期アーカイブ向け超低コストS3ストレージクラス",
+"svc": "Amazon S3 Glacier"
+},
+{
+"text": "Windows(SMB)やLustre(HPC)など用途別に最適化されたマネージドファイルシステム群",
+"svc": "Amazon FSx"
+},
+{
+"text": "複数のLinux/EC2から同時マウントできるマネージドNFSファイルシステム",
+"svc": "Amazon EFS"
+},
+{
+"text": "サーバーをAWSへ継続レプリケーションし、災害時に素早く復旧(DR)",
+"svc": "AWS Elastic Disaster Recovery"
+}
+],
+"answer": 0
+},
+{
+"id": "s5",
+"cat": "ストレージ",
+"svc": "AWS Storage Gateway",
+"q": "AWS Storage Gateway は何をするサービス？",
+"choices": [
+{
+"text": "オンプレのアプリをS3/Glacier/EBSにシームレス接続するハイブリッドストレージ",
+"svc": "AWS Storage Gateway"
+},
+{
+"text": "オンプレ⇄AWS間を高速・検証付きでコピーするオンラインデータ転送",
+"svc": "AWS DataSync"
+},
+{
+"text": "サーバーをAWSへ継続レプリケーションし、災害時に素早く復旧(DR)",
+"svc": "AWS Elastic Disaster Recovery"
+},
+{
+"text": "SFTP/FTPS/FTPで既存クライアントからS3/EFSへファイル転送(マネージド)",
+"svc": "AWS Transfer Family"
+}
+],
+"answer": 0
+},
+{
+"id": "s6",
+"cat": "ストレージ",
+"svc": "AWS DataSync",
+"q": "AWS DataSync は何をするサービス？",
+"choices": [
+{
+"text": "オンプレ⇄AWS間を高速・検証付きでコピーするオンラインデータ転送",
+"svc": "AWS DataSync"
+},
+{
+"text": "Windows(SMB)やLustre(HPC)など用途別に最適化されたマネージドファイルシステム群",
+"svc": "Amazon FSx"
+},
+{
+"text": "複数のLinux/EC2から同時マウントできるマネージドNFSファイルシステム",
+"svc": "Amazon EFS"
+},
+{
+"text": "無限にスケールするオブジェクトストレージ(耐久性11 9's)",
+"svc": "Amazon S3"
+}
+],
+"answer": 0
+},
+{
+"id": "s7",
+"cat": "ストレージ",
+"svc": "AWS Backup",
+"q": "AWS Backup は何をするサービス？",
+"choices": [
+{
+"text": "複数AWSサービスのバックアップをポリシーで一元管理・自動化",
+"svc": "AWS Backup"
+},
+{
+"text": "SFTP/FTPS/FTPで既存クライアントからS3/EFSへファイル転送(マネージド)",
+"svc": "AWS Transfer Family"
+},
+{
+"text": "低RTO不要の長期アーカイブ向け超低コストS3ストレージクラス",
+"svc": "Amazon S3 Glacier"
+},
+{
+"text": "複数のLinux/EC2から同時マウントできるマネージドNFSファイルシステム",
+"svc": "Amazon EFS"
+}
+],
+"answer": 0
+},
+{
+"id": "s8",
+"cat": "ストレージ",
+"svc": "Amazon FSx",
+"q": "Amazon FSx は何をするサービス？",
+"choices": [
+{
+"text": "Windows(SMB)やLustre(HPC)など用途別に最適化されたマネージドファイルシステム群",
+"svc": "Amazon FSx"
+},
+{
+"text": "低RTO不要の長期アーカイブ向け超低コストS3ストレージクラス",
+"svc": "Amazon S3 Glacier"
+},
+{
+"text": "複数のLinux/EC2から同時マウントできるマネージドNFSファイルシステム",
+"svc": "Amazon EFS"
+},
+{
+"text": "複数AWSサービスのバックアップをポリシーで一元管理・自動化",
+"svc": "AWS Backup"
+}
+],
+"answer": 0
+},
+{
+"id": "x3",
+"cat": "ストレージ",
+"svc": "AWS Elastic Disaster Recovery",
+"q": "AWS Elastic Disaster Recovery (DRS) は何をするサービス？",
+"choices": [
+{
+"text": "サーバーをAWSへ継続レプリケーションし、災害時に素早く復旧(DR)",
+"svc": "AWS Elastic Disaster Recovery"
+},
+{
+"text": "オンプレのアプリをS3/Glacier/EBSにシームレス接続するハイブリッドストレージ",
+"svc": "AWS Storage Gateway"
+},
+{
+"text": "複数AWSサービスのバックアップをポリシーで一元管理・自動化",
+"svc": "AWS Backup"
+},
+{
+"text": "オンプレ⇄AWS間を高速・検証付きでコピーするオンラインデータ転送",
+"svc": "AWS DataSync"
+}
+],
+"answer": 0
+},
+{
+"id": "y4",
+"cat": "ストレージ",
+"svc": "AWS Transfer Family",
+"q": "AWS Transfer Family は何をするサービス？",
+"choices": [
+{
+"text": "SFTP/FTPS/FTPで既存クライアントからS3/EFSへファイル転送(マネージド)",
+"svc": "AWS Transfer Family"
+},
+{
+"text": "無限にスケールするオブジェクトストレージ(耐久性11 9's)",
+"svc": "Amazon S3"
+},
+{
+"text": "複数のLinux/EC2から同時マウントできるマネージドNFSファイルシステム",
+"svc": "Amazon EFS"
+},
+{
+"text": "オンプレのアプリをS3/Glacier/EBSにシームレス接続するハイブリッドストレージ",
+"svc": "AWS Storage Gateway"
+}
+],
+"answer": 0
+},
+{
+"id": "sec1",
+"cat": "セキュリティ",
+"svc": "AWS IAM",
+"q": "AWS IAM は何をするサービス？",
+"choices": [
+{
+"text": "AWSサービス/リソースへのID・アクセスを細粒度で管理(認証認可の基盤)",
+"svc": "AWS IAM"
+},
+{
+"text": "カスタムアプリの細粒度な認可をCedarポリシーで外部管理",
+"svc": "Amazon Verified Permissions"
+},
+{
+"text": "専有のハードウェアセキュリティモジュール(HSM)で暗号鍵を管理",
+"svc": "AWS CloudHSM"
+},
+{
+"text": "複数AWSアカウントを階層で一元管理し、ポリシー(SCP)で統制",
+"svc": "AWS Organizations"
+}
+],
+"answer": 0
+},
+{
+"id": "sec10",
+"cat": "セキュリティ",
+"svc": "Amazon Inspector",
+"q": "Amazon Inspector は何をするサービス？",
+"choices": [
+{
+"text": "EC2/コンテナ/Lambdaの脆弱性を自動スキャン",
+"svc": "Amazon Inspector"
+},
+{
+"text": "ログを分析し脅威をインテリジェントに検知",
+"svc": "Amazon GuardDuty"
+},
+{
+"text": "SOC/ISO等のコンプライアンスレポートをオンデマンド取得",
+"svc": "AWS Artifact"
+},
+{
+"text": "OU/アカウントで許可される最大権限を定めるガードレール",
+"svc": "SCP (Service Control Policy)"
+}
+],
+"answer": 0
+},
+{
+"id": "sec11",
+"cat": "セキュリティ",
+"svc": "AWS Security Hub",
+"q": "AWS Security Hub は何をするサービス？",
+"choices": [
+{
+"text": "セキュリティ検知・コンプライアンス状況を一元集約・標準化",
+"svc": "AWS Security Hub"
+},
+{
+"text": "DB認証情報/APIキー等のシークレットを安全に保存し自動ローテーション",
+"svc": "AWS Secrets Manager"
+},
+{
+"text": "OU/アカウントで許可される最大権限を定めるガードレール",
+"svc": "SCP (Service Control Policy)"
+},
+{
+"text": "専有のハードウェアセキュリティモジュール(HSM)で暗号鍵を管理",
+"svc": "AWS CloudHSM"
+}
+],
+"answer": 0
+},
+{
+"id": "sec12",
+"cat": "セキュリティ",
+"svc": "AWS WAF",
+"q": "AWS WAF は何をするサービス？",
+"choices": [
+{
+"text": "SQLi/XSS等のL7 Web攻撃やボットをブロックするWebアプリファイアウォール",
+"svc": "AWS WAF"
+},
+{
+"text": "L3/L4のDDoS攻撃から保護",
+"svc": "AWS Shield"
+},
+{
+"text": "フルマネージドのMicrosoft Active Directory",
+"svc": "AWS Directory Service"
+},
+{
+"text": "SOC/ISO等のコンプライアンスレポートをオンデマンド取得",
+"svc": "AWS Artifact"
+}
+],
+"answer": 0
+},
+{
+"id": "sec13",
+"cat": "セキュリティ",
+"svc": "AWS Shield",
+"q": "AWS Shield は何をするサービス？",
+"choices": [
+{
+"text": "L3/L4のDDoS攻撃から保護",
+"svc": "AWS Shield"
+},
+{
+"text": "VPC向けのマネージドなステートフルネットワークファイアウォール(IPS)",
+"svc": "AWS Network Firewall"
+},
+{
+"text": "フルマネージドのMicrosoft Active Directory",
+"svc": "AWS Directory Service"
+},
+{
+"text": "複数AWSアカウント/アプリへの従業員アクセスを集中管理(SSO)",
+"svc": "AWS IAM Identity Center"
+}
+],
+"answer": 0
+},
+{
+"id": "sec14",
+"cat": "セキュリティ",
+"svc": "AWS STS",
+"q": "AWS STS は何をするサービス？",
+"choices": [
+{
+"text": "一時的なセキュリティ認証情報を発行(AssumeRole等)",
+"svc": "AWS STS"
+},
+{
+"text": "SOC/ISO等のコンプライアンスレポートをオンデマンド取得",
+"svc": "AWS Artifact"
+},
+{
+"text": "L3/L4のDDoS攻撃から保護",
+"svc": "AWS Shield"
+},
+{
+"text": "SSL/TLS証明書の発行・管理・自動更新",
+"svc": "AWS Certificate Manager"
+}
+],
+"answer": 0
+},
+{
+"id": "sec15",
+"cat": "セキュリティ",
+"svc": "AWS RAM",
+"q": "AWS RAM (Resource Access Manager) は何をするサービス？",
+"choices": [
+{
+"text": "AWSリソース(サブネット/TGW等)を複数アカウント間で安全に共有",
+"svc": "AWS RAM"
+},
+{
+"text": "L3/L4のDDoS攻撃から保護",
+"svc": "AWS Shield"
+},
+{
+"text": "セキュリティ検出結果の根本原因を調査・可視化",
+"svc": "Amazon Detective"
+},
+{
+"text": "ログを分析し脅威をインテリジェントに検知",
+"svc": "Amazon GuardDuty"
+}
+],
+"answer": 0
+},
+{
+"id": "sec16",
+"cat": "セキュリティ",
+"svc": "AWS Directory Service",
+"q": "AWS Directory Service は何をするサービス？",
+"choices": [
+{
+"text": "フルマネージドのMicrosoft Active Directory",
+"svc": "AWS Directory Service"
+},
+{
+"text": "SQLi/XSS等のL7 Web攻撃やボットをブロックするWebアプリファイアウォール",
+"svc": "AWS WAF"
+},
+{
+"text": "専有のハードウェアセキュリティモジュール(HSM)で暗号鍵を管理",
+"svc": "AWS CloudHSM"
+},
+{
+"text": "SOC/ISO等のコンプライアンスレポートをオンデマンド取得",
+"svc": "AWS Artifact"
+}
+],
+"answer": 0
+},
+{
+"id": "sec17",
+"cat": "セキュリティ",
+"svc": "AWS Certificate Manager",
+"q": "AWS Certificate Manager (ACM) は何をするサービス？",
+"choices": [
+{
+"text": "SSL/TLS証明書の発行・管理・自動更新",
+"svc": "AWS Certificate Manager"
+},
+{
+"text": "カスタムアプリの細粒度な認可をCedarポリシーで外部管理",
+"svc": "Amazon Verified Permissions"
+},
+{
+"text": "複数AWSアカウントを階層で一元管理し、ポリシー(SCP)で統制",
+"svc": "AWS Organizations"
+},
+{
+"text": "SQLi/XSS等のL7 Web攻撃やボットをブロックするWebアプリファイアウォール",
+"svc": "AWS WAF"
+}
+],
+"answer": 0
+},
+{
+"id": "sec18",
+"cat": "セキュリティ",
+"svc": "AWS Firewall Manager",
+"q": "AWS Firewall Manager は何をするサービス？",
+"choices": [
+{
+"text": "WAF/Shield/SG等のルールを組織全体で一元管理・強制",
+"svc": "AWS Firewall Manager"
+},
+{
+"text": "DB認証情報/APIキー等のシークレットを安全に保存し自動ローテーション",
+"svc": "AWS Secrets Manager"
+},
+{
+"text": "セキュリティ検出結果の根本原因を調査・可視化",
+"svc": "Amazon Detective"
+},
+{
+"text": "AWSサービス/リソースへのID・アクセスを細粒度で管理(認証認可の基盤)",
+"svc": "AWS IAM"
+}
+],
+"answer": 0
+},
+{
+"id": "sec19",
+"cat": "セキュリティ",
+"svc": "AWS CloudHSM",
+"q": "AWS CloudHSM は何をするサービス？",
+"choices": [
+{
+"text": "専有のハードウェアセキュリティモジュール(HSM)で暗号鍵を管理",
+"svc": "AWS CloudHSM"
+},
+{
+"text": "暗号鍵を集中管理し各サービスの暗号化を制御",
+"svc": "AWS KMS"
+},
+{
+"text": "WAF/Shield/SG等のルールを組織全体で一元管理・強制",
+"svc": "AWS Firewall Manager"
+},
+{
+"text": "セキュリティ検出結果の根本原因を調査・可視化",
+"svc": "Amazon Detective"
+}
+],
+"answer": 0
+},
+{
+"id": "sec2",
+"cat": "セキュリティ",
+"svc": "AWS Organizations",
+"q": "AWS Organizations は何をするサービス？",
+"choices": [
+{
+"text": "複数AWSアカウントを階層で一元管理し、ポリシー(SCP)で統制",
+"svc": "AWS Organizations"
+},
+{
+"text": "セキュリティ検出結果の根本原因を調査・可視化",
+"svc": "Amazon Detective"
+},
+{
+"text": "専有のハードウェアセキュリティモジュール(HSM)で暗号鍵を管理",
+"svc": "AWS CloudHSM"
+},
+{
+"text": "AWSサービス/リソースへのID・アクセスを細粒度で管理(認証認可の基盤)",
+"svc": "AWS IAM"
+}
+],
+"answer": 0
+},
+{
+"id": "sec20",
+"cat": "セキュリティ",
+"svc": "Amazon Detective",
+"q": "Amazon Detective は何をするサービス？",
+"choices": [
+{
+"text": "セキュリティ検出結果の根本原因を調査・可視化",
+"svc": "Amazon Detective"
+},
+{
+"text": "AWSリソース(サブネット/TGW等)を複数アカウント間で安全に共有",
+"svc": "AWS RAM"
+},
+{
+"text": "SQLi/XSS等のL7 Web攻撃やボットをブロックするWebアプリファイアウォール",
+"svc": "AWS WAF"
+},
+{
+"text": "監査に必要な証跡を自動収集し統制の有効性を評価",
+"svc": "AWS Audit Manager"
+}
+],
+"answer": 0
+},
+{
+"id": "sec21",
+"cat": "セキュリティ",
+"svc": "AWS Network Firewall",
+"q": "AWS Network Firewall は何をするサービス？",
+"choices": [
+{
+"text": "VPC向けのマネージドなステートフルネットワークファイアウォール(IPS)",
+"svc": "AWS Network Firewall"
+},
+{
+"text": "SSL/TLS証明書の発行・管理・自動更新",
+"svc": "AWS Certificate Manager"
+},
+{
+"text": "SQLi/XSS等のL7 Web攻撃やボットをブロックするWebアプリファイアウォール",
+"svc": "AWS WAF"
+},
+{
+"text": "DB認証情報/APIキー等のシークレットを安全に保存し自動ローテーション",
+"svc": "AWS Secrets Manager"
+}
+],
+"answer": 0
+},
+{
+"id": "sec22",
+"cat": "セキュリティ",
+"svc": "Amazon Verified Permissions",
+"q": "Amazon Verified Permissions は何をするサービス？",
+"choices": [
+{
+"text": "カスタムアプリの細粒度な認可をCedarポリシーで外部管理",
+"svc": "Amazon Verified Permissions"
+},
+{
+"text": "SSL/TLS証明書の発行・管理・自動更新",
+"svc": "AWS Certificate Manager"
+},
+{
+"text": "OU/アカウントで許可される最大権限を定めるガードレール",
+"svc": "SCP (Service Control Policy)"
+},
+{
+"text": "VPC向けのマネージドなステートフルネットワークファイアウォール(IPS)",
+"svc": "AWS Network Firewall"
+}
+],
+"answer": 0
+},
+{
+"id": "sec23",
+"cat": "セキュリティ",
+"svc": "AWS Artifact",
+"q": "AWS Artifact は何をするサービス？",
+"choices": [
+{
+"text": "SOC/ISO等のコンプライアンスレポートをオンデマンド取得",
+"svc": "AWS Artifact"
+},
+{
+"text": "L3/L4のDDoS攻撃から保護",
+"svc": "AWS Shield"
+},
+{
+"text": "セキュリティ検知・コンプライアンス状況を一元集約・標準化",
+"svc": "AWS Security Hub"
+},
+{
+"text": "SSL/TLS証明書の発行・管理・自動更新",
+"svc": "AWS Certificate Manager"
+}
+],
+"answer": 0
+},
+{
+"id": "sec24",
+"cat": "セキュリティ",
+"svc": "AWS Audit Manager",
+"q": "AWS Audit Manager は何をするサービス？",
+"choices": [
+{
+"text": "監査に必要な証跡を自動収集し統制の有効性を評価",
+"svc": "AWS Audit Manager"
+},
+{
+"text": "AWSリソース(サブネット/TGW等)を複数アカウント間で安全に共有",
+"svc": "AWS RAM"
+},
+{
+"text": "VPC向けのマネージドなステートフルネットワークファイアウォール(IPS)",
+"svc": "AWS Network Firewall"
+},
+{
+"text": "SOC/ISO等のコンプライアンスレポートをオンデマンド取得",
+"svc": "AWS Artifact"
+}
+],
+"answer": 0
+},
+{
+"id": "sec3",
+"cat": "セキュリティ",
+"svc": "SCP (Service Control Policy)",
+"q": "SCP (Service Control Policy) は何をするもの？",
+"choices": [
+{
+"text": "OU/アカウントで許可される最大権限を定めるガードレール",
+"svc": "SCP (Service Control Policy)"
+},
+{
+"text": "AWSサービス/リソースへのID・アクセスを細粒度で管理(認証認可の基盤)",
+"svc": "AWS IAM"
+},
+{
+"text": "SQLi/XSS等のL7 Web攻撃やボットをブロックするWebアプリファイアウォール",
+"svc": "AWS WAF"
+},
+{
+"text": "セキュリティ検知・コンプライアンス状況を一元集約・標準化",
+"svc": "AWS Security Hub"
+}
+],
+"answer": 0
+},
+{
+"id": "sec4",
+"cat": "セキュリティ",
+"svc": "AWS IAM Identity Center",
+"q": "AWS IAM Identity Center(旧SSO) は何をするサービス？",
+"choices": [
+{
+"text": "複数AWSアカウント/アプリへの従業員アクセスを集中管理(SSO)",
+"svc": "AWS IAM Identity Center"
+},
+{
+"text": "OU/アカウントで許可される最大権限を定めるガードレール",
+"svc": "SCP (Service Control Policy)"
+},
+{
+"text": "カスタムアプリの細粒度な認可をCedarポリシーで外部管理",
+"svc": "Amazon Verified Permissions"
+},
+{
+"text": "L3/L4のDDoS攻撃から保護",
+"svc": "AWS Shield"
+}
+],
+"answer": 0
+},
+{
+"id": "sec5",
+"cat": "セキュリティ",
+"svc": "Amazon Cognito",
+"q": "Amazon Cognito は何をするサービス？",
+"choices": [
+{
+"text": "アプリの顧客ユーザーのサインアップ/サインインと認可(CIAM)",
+"svc": "Amazon Cognito"
+},
+{
+"text": "AWSサービス/リソースへのID・アクセスを細粒度で管理(認証認可の基盤)",
+"svc": "AWS IAM"
+},
+{
+"text": "暗号鍵を集中管理し各サービスの暗号化を制御",
+"svc": "AWS KMS"
+},
+{
+"text": "DB認証情報/APIキー等のシークレットを安全に保存し自動ローテーション",
+"svc": "AWS Secrets Manager"
+}
+],
+"answer": 0
+},
+{
+"id": "sec6",
+"cat": "セキュリティ",
+"svc": "AWS KMS",
+"q": "AWS KMS は何をするサービス？",
+"choices": [
+{
+"text": "暗号鍵を集中管理し各サービスの暗号化を制御",
+"svc": "AWS KMS"
+},
+{
+"text": "SQLi/XSS等のL7 Web攻撃やボットをブロックするWebアプリファイアウォール",
+"svc": "AWS WAF"
+},
+{
+"text": "セキュリティ検出結果の根本原因を調査・可視化",
+"svc": "Amazon Detective"
+},
+{
+"text": "複数AWSアカウントを階層で一元管理し、ポリシー(SCP)で統制",
+"svc": "AWS Organizations"
+}
+],
+"answer": 0
+},
+{
+"id": "sec7",
+"cat": "セキュリティ",
+"svc": "AWS Secrets Manager",
+"q": "AWS Secrets Manager は何をするサービス？",
+"choices": [
+{
+"text": "DB認証情報/APIキー等のシークレットを安全に保存し自動ローテーション",
+"svc": "AWS Secrets Manager"
+},
+{
+"text": "複数AWSアカウント/アプリへの従業員アクセスを集中管理(SSO)",
+"svc": "AWS IAM Identity Center"
+},
+{
+"text": "カスタムアプリの細粒度な認可をCedarポリシーで外部管理",
+"svc": "Amazon Verified Permissions"
+},
+{
+"text": "SQLi/XSS等のL7 Web攻撃やボットをブロックするWebアプリファイアウォール",
+"svc": "AWS WAF"
+}
+],
+"answer": 0
+},
+{
+"id": "sec8",
+"cat": "セキュリティ",
+"svc": "Amazon GuardDuty",
+"q": "Amazon GuardDuty は何をするサービス？",
+"choices": [
+{
+"text": "ログを分析し脅威をインテリジェントに検知",
+"svc": "Amazon GuardDuty"
+},
+{
+"text": "OU/アカウントで許可される最大権限を定めるガードレール",
+"svc": "SCP (Service Control Policy)"
+},
+{
+"text": "AWSサービス/リソースへのID・アクセスを細粒度で管理(認証認可の基盤)",
+"svc": "AWS IAM"
+},
+{
+"text": "DB認証情報/APIキー等のシークレットを安全に保存し自動ローテーション",
+"svc": "AWS Secrets Manager"
+}
+],
+"answer": 0
+},
+{
+"id": "sec9",
+"cat": "セキュリティ",
+"svc": "Amazon Macie",
+"q": "Amazon Macie は何をするサービス？",
+"choices": [
+{
+"text": "S3内の個人情報など機密データを機械学習で検出",
+"svc": "Amazon Macie"
+},
+{
+"text": "専有のハードウェアセキュリティモジュール(HSM)で暗号鍵を管理",
+"svc": "AWS CloudHSM"
+},
+{
+"text": "複数AWSアカウント/アプリへの従業員アクセスを集中管理(SSO)",
+"svc": "AWS IAM Identity Center"
+},
+{
+"text": "暗号鍵を集中管理し各サービスの暗号化を制御",
+"svc": "AWS KMS"
+}
+],
+"answer": 0
+},
+{
+"id": "dev1",
+"cat": "デベロッパーツール",
+"svc": "AWS CodePipeline",
+"q": "AWS CodePipeline は何をするサービス？",
+"choices": [
+{
+"text": "ソース→ビルド→テスト→デプロイ→承認のrelease全体を自動化(CI/CDオーケストレーション)",
+"svc": "AWS CodePipeline"
+},
+{
+"text": "npm/pip/maven等のプライベートなパッケージリポジトリ",
+"svc": "AWS CodeArtifact"
+},
+{
+"text": "ブラウザから使える認証済みのCLI環境",
+"svc": "AWS CloudShell"
+},
+{
+"text": "EC2/Lambda/ECS等へのデプロイを自動化(Blue/Green・カナリア)",
+"svc": "AWS CodeDeploy"
+}
+],
+"answer": 0
+},
+{
+"id": "dev2",
+"cat": "デベロッパーツール",
+"svc": "AWS CodeBuild",
+"q": "AWS CodeBuild は何をするサービス？",
+"choices": [
+{
+"text": "ソースをコンパイル・テスト・パッケージ化するフルマネージドCI",
+"svc": "AWS CodeBuild"
+},
+{
+"text": "ブラウザから使える認証済みのCLI環境",
+"svc": "AWS CloudShell"
+},
+{
+"text": "機械学習でコードレビュー(欠陥指摘)とアプリ性能プロファイリングを行う",
+"svc": "Amazon CodeGuru"
+},
+{
+"text": "フルマネージドのプライベートGitリポジトリ",
+"svc": "AWS CodeCommit"
+}
+],
+"answer": 0
+},
+{
+"id": "dev3",
+"cat": "デベロッパーツール",
+"svc": "AWS CodeDeploy",
+"q": "AWS CodeDeploy は何をするサービス？",
+"choices": [
+{
+"text": "EC2/Lambda/ECS等へのデプロイを自動化(Blue/Green・カナリア)",
+"svc": "AWS CodeDeploy"
+},
+{
+"text": "ソース→ビルド→テスト→デプロイ→承認のrelease全体を自動化(CI/CDオーケストレーション)",
+"svc": "AWS CodePipeline"
+},
+{
+"text": "機械学習でコードレビュー(欠陥指摘)とアプリ性能プロファイリングを行う",
+"svc": "Amazon CodeGuru"
+},
+{
+"text": "フルマネージドのプライベートGitリポジトリ",
+"svc": "AWS CodeCommit"
+}
+],
+"answer": 0
+},
+{
+"id": "dev4",
+"cat": "デベロッパーツール",
+"svc": "AWS X-Ray",
+"q": "AWS X-Ray は何をするサービス？",
+"choices": [
+{
+"text": "分散アプリのリクエストをトレースしボトルネック/エラーを可視化",
+"svc": "AWS X-Ray"
+},
+{
+"text": "フルマネージドのプライベートGitリポジトリ",
+"svc": "AWS CodeCommit"
+},
+{
+"text": "ソース→ビルド→テスト→デプロイ→承認のrelease全体を自動化(CI/CDオーケストレーション)",
+"svc": "AWS CodePipeline"
+},
+{
+"text": "機械学習でコードレビュー(欠陥指摘)とアプリ性能プロファイリングを行う",
+"svc": "Amazon CodeGuru"
+}
+],
+"answer": 0
+},
+{
+"id": "dev5",
+"cat": "デベロッパーツール",
+"svc": "AWS CodeArtifact",
+"q": "AWS CodeArtifact は何をするサービス？",
+"choices": [
+{
+"text": "npm/pip/maven等のプライベートなパッケージリポジトリ",
+"svc": "AWS CodeArtifact"
+},
+{
+"text": "ソース→ビルド→テスト→デプロイ→承認のrelease全体を自動化(CI/CDオーケストレーション)",
+"svc": "AWS CodePipeline"
+},
+{
+"text": "EC2/Lambda/ECS等へのデプロイを自動化(Blue/Green・カナリア)",
+"svc": "AWS CodeDeploy"
+},
+{
+"text": "分散アプリのリクエストをトレースしボトルネック/エラーを可視化",
+"svc": "AWS X-Ray"
+}
+],
+"answer": 0
+},
+{
+"id": "dev6",
+"cat": "デベロッパーツール",
+"svc": "AWS CodeCommit",
+"q": "AWS CodeCommit は何をするサービス？",
+"choices": [
+{
+"text": "フルマネージドのプライベートGitリポジトリ",
+"svc": "AWS CodeCommit"
+},
+{
+"text": "ブラウザから使える認証済みのCLI環境",
+"svc": "AWS CloudShell"
+},
+{
+"text": "機械学習でコードレビュー(欠陥指摘)とアプリ性能プロファイリングを行う",
+"svc": "Amazon CodeGuru"
+},
+{
+"text": "分散アプリのリクエストをトレースしボトルネック/エラーを可視化",
+"svc": "AWS X-Ray"
+}
+],
+"answer": 0
+},
+{
+"id": "dev7",
+"cat": "デベロッパーツール",
+"svc": "AWS CloudShell",
+"q": "AWS CloudShell は何をするサービス？",
+"choices": [
+{
+"text": "ブラウザから使える認証済みのCLI環境",
+"svc": "AWS CloudShell"
+},
+{
+"text": "ソースをコンパイル・テスト・パッケージ化するフルマネージドCI",
+"svc": "AWS CodeBuild"
+},
+{
+"text": "npm/pip/maven等のプライベートなパッケージリポジトリ",
+"svc": "AWS CodeArtifact"
+},
+{
+"text": "EC2/Lambda/ECS等へのデプロイを自動化(Blue/Green・カナリア)",
+"svc": "AWS CodeDeploy"
+}
+],
+"answer": 0
+},
+{
+"id": "x12",
+"cat": "デベロッパーツール",
+"svc": "Amazon CodeGuru",
+"q": "Amazon CodeGuru は何をするサービス？",
+"choices": [
+{
+"text": "機械学習でコードレビュー(欠陥指摘)とアプリ性能プロファイリングを行う",
+"svc": "Amazon CodeGuru"
+},
+{
+"text": "ソース→ビルド→テスト→デプロイ→承認のrelease全体を自動化(CI/CDオーケストレーション)",
+"svc": "AWS CodePipeline"
+},
+{
+"text": "npm/pip/maven等のプライベートなパッケージリポジトリ",
+"svc": "AWS CodeArtifact"
+},
+{
+"text": "フルマネージドのプライベートGitリポジトリ",
+"svc": "AWS CodeCommit"
+}
+],
+"answer": 0
+},
+{
+"id": "d1",
+"cat": "データベース",
+"svc": "Amazon RDS",
+"q": "Amazon RDS は何をするサービス？",
+"choices": [
+{
+"text": "6種のエンジンから選べるマネージドなリレーショナルDB",
+"svc": "Amazon RDS"
+},
+{
+"text": "負荷に応じて自動でキャパシティを増減するAurora",
+"svc": "Amazon Aurora Serverless"
+},
+{
+"text": "変更履歴を検証可能な形で持つ台帳データベース",
+"svc": "Amazon QLDB"
+},
+{
+"text": "Apache Cassandra互換のマネージドなワイドカラムDB",
+"svc": "Amazon Keyspaces"
+}
+],
+"answer": 0
+},
+{
+"id": "d10",
+"cat": "データベース",
+"svc": "AWS DMS",
+"q": "AWS DMS (Database Migration Service) は何をするサービス？",
+"choices": [
+{
+"text": "DBを稼働させたまま最小ダウンタイムで移行(同種/異種エンジン)",
+"svc": "AWS DMS"
+},
+{
+"text": "任意規模で一桁ミリ秒レイテンシのフルマネージドNoSQL(キーバリュー/ドキュメント)",
+"svc": "Amazon DynamoDB"
+},
+{
+"text": "MongoDB互換のフルマネージドドキュメントDB",
+"svc": "Amazon DocumentDB"
+},
+{
+"text": "高速なマネージドインメモリキャッシュ(Redis/Memcached)でDB負荷を軽減",
+"svc": "Amazon ElastiCache"
+}
+],
+"answer": 0
+},
+{
+"id": "d11",
+"cat": "データベース",
+"svc": "Amazon Aurora Serverless",
+"q": "Amazon Aurora Serverless (v2) は何をするサービス？",
+"choices": [
+{
+"text": "負荷に応じて自動でキャパシティを増減するAurora",
+"svc": "Amazon Aurora Serverless"
+},
+{
+"text": "高速なマネージドインメモリキャッシュ(Redis/Memcached)でDB負荷を軽減",
+"svc": "Amazon ElastiCache"
+},
+{
+"text": "関係性を扱うフルマネージドのグラフデータベース",
+"svc": "Amazon Neptune"
+},
+{
+"text": "Apache Cassandra互換のマネージドなワイドカラムDB",
+"svc": "Amazon Keyspaces"
+}
+],
+"answer": 0
+},
+{
+"id": "d12",
+"cat": "データベース",
+"svc": "Amazon MemoryDB",
+"q": "Amazon MemoryDB は何をするサービス？",
+"choices": [
+{
+"text": "Redis互換で永続性のあるインメモリデータベース(プライマリDBに使える)",
+"svc": "Amazon MemoryDB"
+},
+{
+"text": "Apache Cassandra互換のマネージドなワイドカラムDB",
+"svc": "Amazon Keyspaces"
+},
+{
+"text": "6種のエンジンから選べるマネージドなリレーショナルDB",
+"svc": "Amazon RDS"
+},
+{
+"text": "IoT・メトリクス等の時系列データ向けフルマネージドDB",
+"svc": "Amazon Timestream"
+}
+],
+"answer": 0
+},
+{
+"id": "d13",
+"cat": "データベース",
+"svc": "Amazon QLDB",
+"q": "Amazon QLDB は何をするサービス？",
+"choices": [
+{
+"text": "変更履歴を検証可能な形で持つ台帳データベース",
+"svc": "Amazon QLDB"
+},
+{
+"text": "Apache Cassandra互換のマネージドなワイドカラムDB",
+"svc": "Amazon Keyspaces"
+},
+{
+"text": "ペタバイト級の分析向け列指向データウェアハウス(DWH)",
+"svc": "Amazon Redshift"
+},
+{
+"text": "MySQL/PostgreSQL互換の高性能クラウドネイティブなマネージドRDB",
+"svc": "Amazon Aurora"
+}
+],
+"answer": 0
+},
+{
+"id": "d2",
+"cat": "データベース",
+"svc": "Amazon Aurora",
+"q": "Amazon Aurora は何をするサービス？",
+"choices": [
+{
+"text": "MySQL/PostgreSQL互換の高性能クラウドネイティブなマネージドRDB",
+"svc": "Amazon Aurora"
+},
+{
+"text": "6種のエンジンから選べるマネージドなリレーショナルDB",
+"svc": "Amazon RDS"
+},
+{
+"text": "任意規模で一桁ミリ秒レイテンシのフルマネージドNoSQL(キーバリュー/ドキュメント)",
+"svc": "Amazon DynamoDB"
+},
+{
+"text": "関係性を扱うフルマネージドのグラフデータベース",
+"svc": "Amazon Neptune"
+}
+],
+"answer": 0
+},
+{
+"id": "d3",
+"cat": "データベース",
+"svc": "Amazon DynamoDB",
+"q": "Amazon DynamoDB は何をするサービス？",
+"choices": [
+{
+"text": "任意規模で一桁ミリ秒レイテンシのフルマネージドNoSQL(キーバリュー/ドキュメント)",
+"svc": "Amazon DynamoDB"
+},
+{
+"text": "6種のエンジンから選べるマネージドなリレーショナルDB",
+"svc": "Amazon RDS"
+},
+{
+"text": "Apache Cassandra互換のマネージドなワイドカラムDB",
+"svc": "Amazon Keyspaces"
+},
+{
+"text": "高速なマネージドインメモリキャッシュ(Redis/Memcached)でDB負荷を軽減",
+"svc": "Amazon ElastiCache"
+}
+],
+"answer": 0
+},
+{
+"id": "d4",
+"cat": "データベース",
+"svc": "Amazon ElastiCache",
+"q": "Amazon ElastiCache は何をするサービス？",
+"choices": [
+{
+"text": "高速なマネージドインメモリキャッシュ(Redis/Memcached)でDB負荷を軽減",
+"svc": "Amazon ElastiCache"
+},
+{
+"text": "IoT・メトリクス等の時系列データ向けフルマネージドDB",
+"svc": "Amazon Timestream"
+},
+{
+"text": "変更履歴を検証可能な形で持つ台帳データベース",
+"svc": "Amazon QLDB"
+},
+{
+"text": "MongoDB互換のフルマネージドドキュメントDB",
+"svc": "Amazon DocumentDB"
+}
+],
+"answer": 0
+},
+{
+"id": "d5",
+"cat": "データベース",
+"svc": "Amazon Redshift",
+"q": "Amazon Redshift は何をするサービス？",
+"choices": [
+{
+"text": "ペタバイト級の分析向け列指向データウェアハウス(DWH)",
+"svc": "Amazon Redshift"
+},
+{
+"text": "MySQL/PostgreSQL互換の高性能クラウドネイティブなマネージドRDB",
+"svc": "Amazon Aurora"
+},
+{
+"text": "DBを稼働させたまま最小ダウンタイムで移行(同種/異種エンジン)",
+"svc": "AWS DMS"
+},
+{
+"text": "Apache Cassandra互換のマネージドなワイドカラムDB",
+"svc": "Amazon Keyspaces"
+}
+],
+"answer": 0
+},
+{
+"id": "d6",
+"cat": "データベース",
+"svc": "Amazon DocumentDB",
+"q": "Amazon DocumentDB は何をするサービス？",
+"choices": [
+{
+"text": "MongoDB互換のフルマネージドドキュメントDB",
+"svc": "Amazon DocumentDB"
+},
+{
+"text": "DBを稼働させたまま最小ダウンタイムで移行(同種/異種エンジン)",
+"svc": "AWS DMS"
+},
+{
+"text": "高速なマネージドインメモリキャッシュ(Redis/Memcached)でDB負荷を軽減",
+"svc": "Amazon ElastiCache"
+},
+{
+"text": "Redis互換で永続性のあるインメモリデータベース(プライマリDBに使える)",
+"svc": "Amazon MemoryDB"
+}
+],
+"answer": 0
+},
+{
+"id": "d7",
+"cat": "データベース",
+"svc": "Amazon Neptune",
+"q": "Amazon Neptune は何をするサービス？",
+"choices": [
+{
+"text": "関係性を扱うフルマネージドのグラフデータベース",
+"svc": "Amazon Neptune"
+},
+{
+"text": "Apache Cassandra互換のマネージドなワイドカラムDB",
+"svc": "Amazon Keyspaces"
+},
+{
+"text": "ペタバイト級の分析向け列指向データウェアハウス(DWH)",
+"svc": "Amazon Redshift"
+},
+{
+"text": "負荷に応じて自動でキャパシティを増減するAurora",
+"svc": "Amazon Aurora Serverless"
+}
+],
+"answer": 0
+},
+{
+"id": "d8",
+"cat": "データベース",
+"svc": "Amazon Keyspaces",
+"q": "Amazon Keyspaces は何をするサービス？",
+"choices": [
+{
+"text": "Apache Cassandra互換のマネージドなワイドカラムDB",
+"svc": "Amazon Keyspaces"
+},
+{
+"text": "6種のエンジンから選べるマネージドなリレーショナルDB",
+"svc": "Amazon RDS"
+},
+{
+"text": "負荷に応じて自動でキャパシティを増減するAurora",
+"svc": "Amazon Aurora Serverless"
+},
+{
+"text": "高速なマネージドインメモリキャッシュ(Redis/Memcached)でDB負荷を軽減",
+"svc": "Amazon ElastiCache"
+}
+],
+"answer": 0
+},
+{
+"id": "d9",
+"cat": "データベース",
+"svc": "Amazon Timestream",
+"q": "Amazon Timestream は何をするサービス？",
+"choices": [
+{
+"text": "IoT・メトリクス等の時系列データ向けフルマネージドDB",
+"svc": "Amazon Timestream"
+},
+{
+"text": "負荷に応じて自動でキャパシティを増減するAurora",
+"svc": "Amazon Aurora Serverless"
+},
+{
+"text": "Redis互換で永続性のあるインメモリデータベース(プライマリDBに使える)",
+"svc": "Amazon MemoryDB"
+},
+{
+"text": "関係性を扱うフルマネージドのグラフデータベース",
+"svc": "Amazon Neptune"
+}
+],
+"answer": 0
+},
+{
+"id": "n1",
+"cat": "ネットワーキング",
+"svc": "Amazon VPC",
+"q": "Amazon VPC は何をするサービス？",
+"choices": [
+{
+"text": "AWS上に論理的に分離した自分専用の仮想ネットワークを構築",
+"svc": "Amazon VPC"
+},
+{
+"text": "マイクロサービス間通信を可視化・制御するサービスメッシュ(Envoyベース)",
+"svc": "AWS App Mesh"
+},
+{
+"text": "AWSグローバルネットワーク経由で可用性と性能を上げる固定エニーキャストIP",
+"svc": "AWS Global Accelerator"
+},
+{
+"text": "複数リージョン・オンプレをまたぐグローバル広域網をポリシーで一元管理",
+"svc": "AWS Cloud WAN"
+}
+],
+"answer": 0
+},
+{
+"id": "n10",
+"cat": "ネットワーキング",
+"svc": "AWS Site-to-Site VPN",
+"q": "AWS Site-to-Site VPN は何をするサービス？",
+"choices": [
+{
+"text": "オンプレとAWSをインターネット越しのIPsecトンネルで接続",
+"svc": "AWS Site-to-Site VPN"
+},
+{
+"text": "データセンターとAWS間に専用の物理ネットワーク接続(専用線)を引く",
+"svc": "AWS Direct Connect"
+},
+{
+"text": "複数リージョン・オンプレをまたぐグローバル広域網をポリシーで一元管理",
+"svc": "AWS Cloud WAN"
+},
+{
+"text": "ルーティングポリシーとヘルスチェックを備えたマネージドDNS",
+"svc": "Amazon Route 53"
+}
+],
+"answer": 0
+},
+{
+"id": "n11",
+"cat": "ネットワーキング",
+"svc": "AWS Cloud WAN",
+"q": "AWS Cloud WAN は何をするサービス？",
+"choices": [
+{
+"text": "複数リージョン・オンプレをまたぐグローバル広域網をポリシーで一元管理",
+"svc": "AWS Cloud WAN"
+},
+{
+"text": "インターネットを経由せずAWS/他VPCのサービスにプライベート接続",
+"svc": "AWS PrivateLink"
+},
+{
+"text": "データセンターとAWS間に専用の物理ネットワーク接続(専用線)を引く",
+"svc": "AWS Direct Connect"
+},
+{
+"text": "ルーティングポリシーとヘルスチェックを備えたマネージドDNS",
+"svc": "Amazon Route 53"
+}
+],
+"answer": 0
+},
+{
+"id": "n12",
+"cat": "ネットワーキング",
+"svc": "AWS App Mesh",
+"q": "AWS App Mesh は何をするサービス？",
+"choices": [
+{
+"text": "マイクロサービス間通信を可視化・制御するサービスメッシュ(Envoyベース)",
+"svc": "AWS App Mesh"
+},
+{
+"text": "受信トラフィックを複数ターゲットに自動分散する",
+"svc": "Elastic Load Balancing"
+},
+{
+"text": "エッジロケーションでコンテンツをキャッシュ配信するCDN",
+"svc": "Amazon CloudFront"
+},
+{
+"text": "AWS上に論理的に分離した自分専用の仮想ネットワークを構築",
+"svc": "Amazon VPC"
+}
+],
+"answer": 0
+},
+{
+"id": "n2",
+"cat": "ネットワーキング",
+"svc": "Amazon Route 53",
+"q": "Amazon Route 53 は何をするサービス？",
+"choices": [
+{
+"text": "ルーティングポリシーとヘルスチェックを備えたマネージドDNS",
+"svc": "Amazon Route 53"
+},
+{
+"text": "オンプレとAWSをインターネット越しのIPsecトンネルで接続",
+"svc": "AWS Site-to-Site VPN"
+},
+{
+"text": "マイクロサービス間通信を可視化・制御するサービスメッシュ(Envoyベース)",
+"svc": "AWS App Mesh"
+},
+{
+"text": "エッジロケーションでコンテンツをキャッシュ配信するCDN",
+"svc": "Amazon CloudFront"
+}
+],
+"answer": 0
+},
+{
+"id": "n3",
+"cat": "ネットワーキング",
+"svc": "Amazon CloudFront",
+"q": "Amazon CloudFront は何をするサービス？",
+"choices": [
+{
+"text": "エッジロケーションでコンテンツをキャッシュ配信するCDN",
+"svc": "Amazon CloudFront"
+},
+{
+"text": "APIの作成・公開・認証・スロットリングを行うマネージドゲートウェイ",
+"svc": "Amazon API Gateway"
+},
+{
+"text": "ルーティングポリシーとヘルスチェックを備えたマネージドDNS",
+"svc": "Amazon Route 53"
+},
+{
+"text": "マイクロサービス間通信を可視化・制御するサービスメッシュ(Envoyベース)",
+"svc": "AWS App Mesh"
+}
+],
+"answer": 0
+},
+{
+"id": "n4",
+"cat": "ネットワーキング",
+"svc": "Elastic Load Balancing",
+"q": "Elastic Load Balancing (ELB) は何をするサービス？",
+"choices": [
+{
+"text": "受信トラフィックを複数ターゲットに自動分散する",
+"svc": "Elastic Load Balancing"
+},
+{
+"text": "オンプレとAWSをインターネット越しのIPsecトンネルで接続",
+"svc": "AWS Site-to-Site VPN"
+},
+{
+"text": "マイクロサービス間通信を可視化・制御するサービスメッシュ(Envoyベース)",
+"svc": "AWS App Mesh"
+},
+{
+"text": "複数リージョン・オンプレをまたぐグローバル広域網をポリシーで一元管理",
+"svc": "AWS Cloud WAN"
+}
+],
+"answer": 0
+},
+{
+"id": "n5",
+"cat": "ネットワーキング",
+"svc": "Amazon API Gateway",
+"q": "Amazon API Gateway は何をするサービス？",
+"choices": [
+{
+"text": "APIの作成・公開・認証・スロットリングを行うマネージドゲートウェイ",
+"svc": "Amazon API Gateway"
+},
+{
+"text": "AWSグローバルネットワーク経由で可用性と性能を上げる固定エニーキャストIP",
+"svc": "AWS Global Accelerator"
+},
+{
+"text": "インターネットを経由せずAWS/他VPCのサービスにプライベート接続",
+"svc": "AWS PrivateLink"
+},
+{
+"text": "オンプレとAWSをインターネット越しのIPsecトンネルで接続",
+"svc": "AWS Site-to-Site VPN"
+}
+],
+"answer": 0
+},
+{
+"id": "n6",
+"cat": "ネットワーキング",
+"svc": "AWS Direct Connect",
+"q": "AWS Direct Connect は何をするサービス？",
+"choices": [
+{
+"text": "データセンターとAWS間に専用の物理ネットワーク接続(専用線)を引く",
+"svc": "AWS Direct Connect"
+},
+{
+"text": "エッジロケーションでコンテンツをキャッシュ配信するCDN",
+"svc": "Amazon CloudFront"
+},
+{
+"text": "受信トラフィックを複数ターゲットに自動分散する",
+"svc": "Elastic Load Balancing"
+},
+{
+"text": "AWSグローバルネットワーク経由で可用性と性能を上げる固定エニーキャストIP",
+"svc": "AWS Global Accelerator"
+}
+],
+"answer": 0
+},
+{
+"id": "n7",
+"cat": "ネットワーキング",
+"svc": "AWS Transit Gateway",
+"q": "AWS Transit Gateway は何をするサービス？",
+"choices": [
+{
+"text": "多数のVPC/オンプレ接続を集約するネットワークハブ",
+"svc": "AWS Transit Gateway"
+},
+{
+"text": "AWSグローバルネットワーク経由で可用性と性能を上げる固定エニーキャストIP",
+"svc": "AWS Global Accelerator"
+},
+{
+"text": "APIの作成・公開・認証・スロットリングを行うマネージドゲートウェイ",
+"svc": "Amazon API Gateway"
+},
+{
+"text": "インターネットを経由せずAWS/他VPCのサービスにプライベート接続",
+"svc": "AWS PrivateLink"
+}
+],
+"answer": 0
+},
+{
+"id": "n8",
+"cat": "ネットワーキング",
+"svc": "AWS PrivateLink",
+"q": "AWS PrivateLink / VPCエンドポイント は何をするサービス？",
+"choices": [
+{
+"text": "インターネットを経由せずAWS/他VPCのサービスにプライベート接続",
+"svc": "AWS PrivateLink"
+},
+{
+"text": "多数のVPC/オンプレ接続を集約するネットワークハブ",
+"svc": "AWS Transit Gateway"
+},
+{
+"text": "データセンターとAWS間に専用の物理ネットワーク接続(専用線)を引く",
+"svc": "AWS Direct Connect"
+},
+{
+"text": "マイクロサービス間通信を可視化・制御するサービスメッシュ(Envoyベース)",
+"svc": "AWS App Mesh"
+}
+],
+"answer": 0
+},
+{
+"id": "n9",
+"cat": "ネットワーキング",
+"svc": "AWS Global Accelerator",
+"q": "AWS Global Accelerator は何をするサービス？",
+"choices": [
+{
+"text": "AWSグローバルネットワーク経由で可用性と性能を上げる固定エニーキャストIP",
+"svc": "AWS Global Accelerator"
+},
+{
+"text": "ルーティングポリシーとヘルスチェックを備えたマネージドDNS",
+"svc": "Amazon Route 53"
+},
+{
+"text": "多数のVPC/オンプレ接続を集約するネットワークハブ",
+"svc": "AWS Transit Gateway"
+},
+{
+"text": "データセンターとAWS間に専用の物理ネットワーク接続(専用線)を引く",
+"svc": "AWS Direct Connect"
+}
+],
+"answer": 0
+},
+{
+"id": "an1",
+"cat": "分析",
+"svc": "Amazon Athena",
+"q": "Amazon Athena は何をするサービス？",
+"choices": [
+{
+"text": "S3上のデータを標準SQLで分析するサーバーレスクエリサービス",
+"svc": "Amazon Athena"
+},
+{
+"text": "ストリーミングデータをS3/Redshift/OpenSearch等へ確実にロード",
+"svc": "Amazon Data Firehose"
+},
+{
+"text": "フルマネージドのBI・データ可視化(ダッシュボード)",
+"svc": "Amazon QuickSight"
+},
+{
+"text": "サードパーティのデータセットを探して購読・利用できるデータマーケットプレイス",
+"svc": "AWS Data Exchange"
+}
+],
+"answer": 0
+},
+{
+"id": "an10",
+"cat": "分析",
+"svc": "Amazon Managed Service for Apache Flink",
+"q": "Amazon Managed Service for Apache Flink(旧 Kinesis Data Analytics) は何をするサービス？",
+"choices": [
+{
+"text": "ストリーミングデータをSQL/Flinkでリアルタイム分析",
+"svc": "Amazon Managed Service for Apache Flink"
+},
+{
+"text": "フルマネージドのBI・データ可視化(ダッシュボード)",
+"svc": "Amazon QuickSight"
+},
+{
+"text": "接続デバイスからの動画を安全にストリーミングし分析/ML/再生",
+"svc": "Amazon Kinesis Video Streams"
+},
+{
+"text": "データの移動・変換を定期実行するワークフロー(旧世代)",
+"svc": "AWS Data Pipeline"
+}
+],
+"answer": 0
+},
+{
+"id": "an11",
+"cat": "分析",
+"svc": "Amazon Kinesis Video Streams",
+"q": "Amazon Kinesis Video Streams は何をするサービス？",
+"choices": [
+{
+"text": "接続デバイスからの動画を安全にストリーミングし分析/ML/再生",
+"svc": "Amazon Kinesis Video Streams"
+},
+{
+"text": "セキュアなデータレイク構築と列/行レベルのアクセス制御を一元化",
+"svc": "AWS Lake Formation"
+},
+{
+"text": "Apache Kafkaのフルマネージドサービス",
+"svc": "Amazon MSK"
+},
+{
+"text": "サードパーティのデータセットを探して購読・利用できるデータマーケットプレイス",
+"svc": "AWS Data Exchange"
+}
+],
+"answer": 0
+},
+{
+"id": "an12",
+"cat": "分析",
+"svc": "AWS Data Pipeline",
+"q": "AWS Data Pipeline は何をするサービス？",
+"choices": [
+{
+"text": "データの移動・変換を定期実行するワークフロー(旧世代)",
+"svc": "AWS Data Pipeline"
+},
+{
+"text": "フルマネージドのBI・データ可視化(ダッシュボード)",
+"svc": "Amazon QuickSight"
+},
+{
+"text": "Hadoop/Sparkで大量データを処理するマネージドビッグデータクラスタ",
+"svc": "Amazon EMR"
+},
+{
+"text": "セキュアなデータレイク構築と列/行レベルのアクセス制御を一元化",
+"svc": "AWS Lake Formation"
+}
+],
+"answer": 0
+},
+{
+"id": "an2",
+"cat": "分析",
+"svc": "Amazon EMR",
+"q": "Amazon EMR は何をするサービス？",
+"choices": [
+{
+"text": "Hadoop/Sparkで大量データを処理するマネージドビッグデータクラスタ",
+"svc": "Amazon EMR"
+},
+{
+"text": "ログ分析・全文検索・アプリ監視向けのマネージド検索/分析エンジン",
+"svc": "Amazon OpenSearch Service"
+},
+{
+"text": "サードパーティのデータセットを探して購読・利用できるデータマーケットプレイス",
+"svc": "AWS Data Exchange"
+},
+{
+"text": "セキュアなデータレイク構築と列/行レベルのアクセス制御を一元化",
+"svc": "AWS Lake Formation"
+}
+],
+"answer": 0
+},
+{
+"id": "an3",
+"cat": "分析",
+"svc": "Amazon Kinesis Data Streams",
+"q": "Amazon Kinesis Data Streams は何をするサービス？",
+"choices": [
+{
+"text": "大規模・高耐久なリアルタイムデータストリーミング",
+"svc": "Amazon Kinesis Data Streams"
+},
+{
+"text": "Hadoop/Sparkで大量データを処理するマネージドビッグデータクラスタ",
+"svc": "Amazon EMR"
+},
+{
+"text": "S3上のデータを標準SQLで分析するサーバーレスクエリサービス",
+"svc": "Amazon Athena"
+},
+{
+"text": "接続デバイスからの動画を安全にストリーミングし分析/ML/再生",
+"svc": "Amazon Kinesis Video Streams"
+}
+],
+"answer": 0
+},
+{
+"id": "an4",
+"cat": "分析",
+"svc": "Amazon Data Firehose",
+"q": "Amazon Data Firehose(旧 Kinesis Data Firehose) は何をするサービス？",
+"choices": [
+{
+"text": "ストリーミングデータをS3/Redshift/OpenSearch等へ確実にロード",
+"svc": "Amazon Data Firehose"
+},
+{
+"text": "フルマネージドのBI・データ可視化(ダッシュボード)",
+"svc": "Amazon QuickSight"
+},
+{
+"text": "大規模・高耐久なリアルタイムデータストリーミング",
+"svc": "Amazon Kinesis Data Streams"
+},
+{
+"text": "Hadoop/Sparkで大量データを処理するマネージドビッグデータクラスタ",
+"svc": "Amazon EMR"
+}
+],
+"answer": 0
+},
+{
+"id": "an5",
+"cat": "分析",
+"svc": "AWS Glue",
+"q": "AWS Glue は何をするサービス？",
+"choices": [
+{
+"text": "サーバーレスのETL＋データカタログ(スキーマ/メタデータ管理)",
+"svc": "AWS Glue"
+},
+{
+"text": "ログ分析・全文検索・アプリ監視向けのマネージド検索/分析エンジン",
+"svc": "Amazon OpenSearch Service"
+},
+{
+"text": "ストリーミングデータをS3/Redshift/OpenSearch等へ確実にロード",
+"svc": "Amazon Data Firehose"
+},
+{
+"text": "S3上のデータを標準SQLで分析するサーバーレスクエリサービス",
+"svc": "Amazon Athena"
+}
+],
+"answer": 0
+},
+{
+"id": "an6",
+"cat": "分析",
+"svc": "AWS Lake Formation",
+"q": "AWS Lake Formation は何をするサービス？",
+"choices": [
+{
+"text": "セキュアなデータレイク構築と列/行レベルのアクセス制御を一元化",
+"svc": "AWS Lake Formation"
+},
+{
+"text": "大規模・高耐久なリアルタイムデータストリーミング",
+"svc": "Amazon Kinesis Data Streams"
+},
+{
+"text": "Hadoop/Sparkで大量データを処理するマネージドビッグデータクラスタ",
+"svc": "Amazon EMR"
+},
+{
+"text": "ストリーミングデータをSQL/Flinkでリアルタイム分析",
+"svc": "Amazon Managed Service for Apache Flink"
+}
+],
+"answer": 0
+},
+{
+"id": "an7",
+"cat": "分析",
+"svc": "Amazon OpenSearch Service",
+"q": "Amazon OpenSearch Service は何をするサービス？",
+"choices": [
+{
+"text": "ログ分析・全文検索・アプリ監視向けのマネージド検索/分析エンジン",
+"svc": "Amazon OpenSearch Service"
+},
+{
+"text": "Apache Kafkaのフルマネージドサービス",
+"svc": "Amazon MSK"
+},
+{
+"text": "Hadoop/Sparkで大量データを処理するマネージドビッグデータクラスタ",
+"svc": "Amazon EMR"
+},
+{
+"text": "セキュアなデータレイク構築と列/行レベルのアクセス制御を一元化",
+"svc": "AWS Lake Formation"
+}
+],
+"answer": 0
+},
+{
+"id": "an8",
+"cat": "分析",
+"svc": "Amazon QuickSight",
+"q": "Amazon QuickSight は何をするサービス？",
+"choices": [
+{
+"text": "フルマネージドのBI・データ可視化(ダッシュボード)",
+"svc": "Amazon QuickSight"
+},
+{
+"text": "セキュアなデータレイク構築と列/行レベルのアクセス制御を一元化",
+"svc": "AWS Lake Formation"
+},
+{
+"text": "ストリーミングデータをSQL/Flinkでリアルタイム分析",
+"svc": "Amazon Managed Service for Apache Flink"
+},
+{
+"text": "サードパーティのデータセットを探して購読・利用できるデータマーケットプレイス",
+"svc": "AWS Data Exchange"
+}
+],
+"answer": 0
+},
+{
+"id": "an9",
+"cat": "分析",
+"svc": "Amazon MSK",
+"q": "Amazon MSK は何をするサービス？",
+"choices": [
+{
+"text": "Apache Kafkaのフルマネージドサービス",
+"svc": "Amazon MSK"
+},
+{
+"text": "ストリーミングデータをS3/Redshift/OpenSearch等へ確実にロード",
+"svc": "Amazon Data Firehose"
+},
+{
+"text": "Hadoop/Sparkで大量データを処理するマネージドビッグデータクラスタ",
+"svc": "Amazon EMR"
+},
+{
+"text": "フルマネージドのBI・データ可視化(ダッシュボード)",
+"svc": "Amazon QuickSight"
+}
+],
+"answer": 0
+},
+{
+"id": "x10",
+"cat": "分析",
+"svc": "AWS Data Exchange",
+"q": "AWS Data Exchange は何をするサービス？",
+"choices": [
+{
+"text": "サードパーティのデータセットを探して購読・利用できるデータマーケットプレイス",
+"svc": "AWS Data Exchange"
+},
+{
+"text": "Hadoop/Sparkで大量データを処理するマネージドビッグデータクラスタ",
+"svc": "Amazon EMR"
+},
+{
+"text": "フルマネージドのBI・データ可視化(ダッシュボード)",
+"svc": "Amazon QuickSight"
+},
+{
+"text": "S3上のデータを標準SQLで分析するサーバーレスクエリサービス",
+"svc": "Amazon Athena"
+}
+],
+"answer": 0
+},
+{
+"id": "ml1",
+"cat": "機械学習",
+"svc": "Amazon SageMaker AI",
+"q": "Amazon SageMaker AI は何をするサービス？",
+"choices": [
+{
+"text": "機械学習モデルの構築・学習・デプロイを一気通貫で行う",
+"svc": "Amazon SageMaker AI"
+},
+{
+"text": "機械学習ベースのエンタープライズ検索(自然言語で社内文書検索)",
+"svc": "Amazon Kendra"
+},
+{
+"text": "オンライン不正(なりすまし/不正取引)をMLで検知",
+"svc": "Amazon Fraud Detector"
+},
+{
+"text": "テキストを自然な音声に変換(音声合成)",
+"svc": "Amazon Polly"
+}
+],
+"answer": 0
+},
+{
+"id": "ml10",
+"cat": "機械学習",
+"svc": "Amazon Personalize",
+"q": "Amazon Personalize は何をするサービス？",
+"choices": [
+{
+"text": "レコメンデーション(おすすめ)をMLで生成",
+"svc": "Amazon Personalize"
+},
+{
+"text": "スキャン文書/帳票から文字・表・フォームを抽出(OCR+構造化)",
+"svc": "Amazon Textract"
+},
+{
+"text": "音声をテキストに変換(文字起こし)",
+"svc": "Amazon Transcribe"
+},
+{
+"text": "機械学習ベースのエンタープライズ検索(自然言語で社内文書検索)",
+"svc": "Amazon Kendra"
+}
+],
+"answer": 0
+},
+{
+"id": "ml11",
+"cat": "機械学習",
+"svc": "Amazon Fraud Detector",
+"q": "Amazon Fraud Detector は何をするサービス？",
+"choices": [
+{
+"text": "オンライン不正(なりすまし/不正取引)をMLで検知",
+"svc": "Amazon Fraud Detector"
+},
+{
+"text": "テキストの感情・キーフレーズ・エンティティなど自然言語処理(NLP)",
+"svc": "Amazon Comprehend"
+},
+{
+"text": "機械学習モデルの構築・学習・デプロイを一気通貫で行う",
+"svc": "Amazon SageMaker AI"
+},
+{
+"text": "スキャン文書/帳票から文字・表・フォームを抽出(OCR+構造化)",
+"svc": "Amazon Textract"
+}
+],
+"answer": 0
+},
+{
+"id": "ml2",
+"cat": "機械学習",
+"svc": "Amazon Rekognition",
+"q": "Amazon Rekognition は何をするサービス？",
+"choices": [
+{
+"text": "画像・動画の分析(物体/顔/テキスト検出等)を行うML API",
+"svc": "Amazon Rekognition"
+},
+{
+"text": "機械学習ベースのエンタープライズ検索(自然言語で社内文書検索)",
+"svc": "Amazon Kendra"
+},
+{
+"text": "オンライン不正(なりすまし/不正取引)をMLで検知",
+"svc": "Amazon Fraud Detector"
+},
+{
+"text": "テキストを自然な音声に変換(音声合成)",
+"svc": "Amazon Polly"
+}
+],
+"answer": 0
+},
+{
+"id": "ml3",
+"cat": "機械学習",
+"svc": "Amazon Comprehend",
+"q": "Amazon Comprehend は何をするサービス？",
+"choices": [
+{
+"text": "テキストの感情・キーフレーズ・エンティティなど自然言語処理(NLP)",
+"svc": "Amazon Comprehend"
+},
+{
+"text": "機械学習ベースのエンタープライズ検索(自然言語で社内文書検索)",
+"svc": "Amazon Kendra"
+},
+{
+"text": "テキストを多言語に機械翻訳",
+"svc": "Amazon Translate"
+},
+{
+"text": "レコメンデーション(おすすめ)をMLで生成",
+"svc": "Amazon Personalize"
+}
+],
+"answer": 0
+},
+{
+"id": "ml4",
+"cat": "機械学習",
+"svc": "Amazon Textract",
+"q": "Amazon Textract は何をするサービス？",
+"choices": [
+{
+"text": "スキャン文書/帳票から文字・表・フォームを抽出(OCR+構造化)",
+"svc": "Amazon Textract"
+},
+{
+"text": "音声をテキストに変換(文字起こし)",
+"svc": "Amazon Transcribe"
+},
+{
+"text": "機械学習モデルの構築・学習・デプロイを一気通貫で行う",
+"svc": "Amazon SageMaker AI"
+},
+{
+"text": "レコメンデーション(おすすめ)をMLで生成",
+"svc": "Amazon Personalize"
+}
+],
+"answer": 0
+},
+{
+"id": "ml5",
+"cat": "機械学習",
+"svc": "Amazon Transcribe",
+"q": "Amazon Transcribe は何をするサービス？",
+"choices": [
+{
+"text": "音声をテキストに変換(文字起こし)",
+"svc": "Amazon Transcribe"
+},
+{
+"text": "機械学習ベースのエンタープライズ検索(自然言語で社内文書検索)",
+"svc": "Amazon Kendra"
+},
+{
+"text": "スキャン文書/帳票から文字・表・フォームを抽出(OCR+構造化)",
+"svc": "Amazon Textract"
+},
+{
+"text": "レコメンデーション(おすすめ)をMLで生成",
+"svc": "Amazon Personalize"
+}
+],
+"answer": 0
+},
+{
+"id": "ml6",
+"cat": "機械学習",
+"svc": "Amazon Polly",
+"q": "Amazon Polly は何をするサービス？",
+"choices": [
+{
+"text": "テキストを自然な音声に変換(音声合成)",
+"svc": "Amazon Polly"
+},
+{
+"text": "音声をテキストに変換(文字起こし)",
+"svc": "Amazon Transcribe"
+},
+{
+"text": "機械学習ベースのエンタープライズ検索(自然言語で社内文書検索)",
+"svc": "Amazon Kendra"
+},
+{
+"text": "テキストの感情・キーフレーズ・エンティティなど自然言語処理(NLP)",
+"svc": "Amazon Comprehend"
+}
+],
+"answer": 0
+},
+{
+"id": "ml7",
+"cat": "機械学習",
+"svc": "Amazon Translate",
+"q": "Amazon Translate は何をするサービス？",
+"choices": [
+{
+"text": "テキストを多言語に機械翻訳",
+"svc": "Amazon Translate"
+},
+{
+"text": "テキストを自然な音声に変換(音声合成)",
+"svc": "Amazon Polly"
+},
+{
+"text": "画像・動画の分析(物体/顔/テキスト検出等)を行うML API",
+"svc": "Amazon Rekognition"
+},
+{
+"text": "スキャン文書/帳票から文字・表・フォームを抽出(OCR+構造化)",
+"svc": "Amazon Textract"
+}
+],
+"answer": 0
+},
+{
+"id": "ml8",
+"cat": "機械学習",
+"svc": "Amazon Lex",
+"q": "Amazon Lex は何をするサービス？",
+"choices": [
+{
+"text": "音声/テキストの会話ボット(チャットボット)を構築",
+"svc": "Amazon Lex"
+},
+{
+"text": "画像・動画の分析(物体/顔/テキスト検出等)を行うML API",
+"svc": "Amazon Rekognition"
+},
+{
+"text": "テキストを自然な音声に変換(音声合成)",
+"svc": "Amazon Polly"
+},
+{
+"text": "レコメンデーション(おすすめ)をMLで生成",
+"svc": "Amazon Personalize"
+}
+],
+"answer": 0
+},
+{
+"id": "ml9",
+"cat": "機械学習",
+"svc": "Amazon Kendra",
+"q": "Amazon Kendra は何をするサービス？",
+"choices": [
+{
+"text": "機械学習ベースのエンタープライズ検索(自然言語で社内文書検索)",
+"svc": "Amazon Kendra"
+},
+{
+"text": "オンライン不正(なりすまし/不正取引)をMLで検知",
+"svc": "Amazon Fraud Detector"
+},
+{
+"text": "テキストを自然な音声に変換(音声合成)",
+"svc": "Amazon Polly"
+},
+{
+"text": "テキストの感情・キーフレーズ・エンティティなど自然言語処理(NLP)",
+"svc": "Amazon Comprehend"
+}
+],
+"answer": 0
+},
+{
+"id": "mig1",
+"cat": "移行・転送",
+"svc": "AWS Application Migration Service",
+"q": "AWS Application Migration Service (MGN) は何をするサービス？",
+"choices": [
+{
+"text": "サーバーをそのままEC2へ移行する主力のlift-and-shiftツール",
+"svc": "AWS Application Migration Service"
+},
+{
+"text": "オンプレサーバーの増分レプリケーションを自動化(旧世代。後継=MGN)",
+"svc": "AWS Server Migration Service"
+},
+{
+"text": "サーバー発見・移行計画・各アプリ移行状況を一元管理するハブ",
+"svc": "AWS Migration Hub"
+},
+{
+"text": "物理アプライアンスでペタバイト級データをオフライン輸送",
+"svc": "AWS Snow Family"
+}
+],
+"answer": 0
+},
+{
+"id": "mig2",
+"cat": "移行・転送",
+"svc": "AWS Migration Hub",
+"q": "AWS Migration Hub は何をするサービス？",
+"choices": [
+{
+"text": "サーバー発見・移行計画・各アプリ移行状況を一元管理するハブ",
+"svc": "AWS Migration Hub"
+},
+{
+"text": "サーバーをそのままEC2へ移行する主力のlift-and-shiftツール",
+"svc": "AWS Application Migration Service"
+},
+{
+"text": "物理アプライアンスでペタバイト級データをオフライン輸送",
+"svc": "AWS Snow Family"
+},
+{
+"text": "オンプレ環境のサーバー構成・依存関係・使用状況を発見(移行前のアセスメント)",
+"svc": "AWS Application Discovery Service"
+}
+],
+"answer": 0
+},
+{
+"id": "mig3",
+"cat": "移行・転送",
+"svc": "AWS Application Discovery Service",
+"q": "AWS Application Discovery Service は何をするサービス？",
+"choices": [
+{
+"text": "オンプレ環境のサーバー構成・依存関係・使用状況を発見(移行前のアセスメント)",
+"svc": "AWS Application Discovery Service"
+},
+{
+"text": "サーバー発見・移行計画・各アプリ移行状況を一元管理するハブ",
+"svc": "AWS Migration Hub"
+},
+{
+"text": "サーバーをそのままEC2へ移行する主力のlift-and-shiftツール",
+"svc": "AWS Application Migration Service"
+},
+{
+"text": "オンプレサーバーの増分レプリケーションを自動化(旧世代。後継=MGN)",
+"svc": "AWS Server Migration Service"
+}
+],
+"answer": 0
+},
+{
+"id": "mig4",
+"cat": "移行・転送",
+"svc": "AWS Snow Family",
+"q": "AWS Snow Family (Snowball等) は何をするサービス？",
+"choices": [
+{
+"text": "物理アプライアンスでペタバイト級データをオフライン輸送",
+"svc": "AWS Snow Family"
+},
+{
+"text": "オンプレサーバーの増分レプリケーションを自動化(旧世代。後継=MGN)",
+"svc": "AWS Server Migration Service"
+},
+{
+"text": "異種DB移行でソースのスキーマ/コードをターゲット向けに変換(DMSの相棒)",
+"svc": "AWS Schema Conversion Tool"
+},
+{
+"text": "サーバーをそのままEC2へ移行する主力のlift-and-shiftツール",
+"svc": "AWS Application Migration Service"
+}
+],
+"answer": 0
+},
+{
+"id": "mig5",
+"cat": "移行・転送",
+"svc": "AWS Server Migration Service",
+"q": "AWS Server Migration Service (SMS) は何をするサービス？",
+"choices": [
+{
+"text": "オンプレサーバーの増分レプリケーションを自動化(旧世代。後継=MGN)",
+"svc": "AWS Server Migration Service"
+},
+{
+"text": "サーバーをそのままEC2へ移行する主力のlift-and-shiftツール",
+"svc": "AWS Application Migration Service"
+},
+{
+"text": "サーバー発見・移行計画・各アプリ移行状況を一元管理するハブ",
+"svc": "AWS Migration Hub"
+},
+{
+"text": "異種DB移行でソースのスキーマ/コードをターゲット向けに変換(DMSの相棒)",
+"svc": "AWS Schema Conversion Tool"
+}
+],
+"answer": 0
+},
+{
+"id": "x2",
+"cat": "移行・転送",
+"svc": "AWS Schema Conversion Tool",
+"q": "AWS SCT (Schema Conversion Tool) は何をするサービス？",
+"choices": [
+{
+"text": "異種DB移行でソースのスキーマ/コードをターゲット向けに変換(DMSの相棒)",
+"svc": "AWS Schema Conversion Tool"
+},
+{
+"text": "オンプレ環境のサーバー構成・依存関係・使用状況を発見(移行前のアセスメント)",
+"svc": "AWS Application Discovery Service"
+},
+{
+"text": "サーバー発見・移行計画・各アプリ移行状況を一元管理するハブ",
+"svc": "AWS Migration Hub"
+},
+{
+"text": "物理アプライアンスでペタバイト級データをオフライン輸送",
+"svc": "AWS Snow Family"
+}
+],
+"answer": 0
+},
+{
+"id": "m1",
+"cat": "管理・ガバナンス",
+"svc": "Amazon CloudWatch",
+"q": "Amazon CloudWatch は何をするサービス？",
+"choices": [
+{
+"text": "メトリクス・ログ・アラームでリソースとアプリを監視(運用の可観測性)",
+"svc": "Amazon CloudWatch"
+},
+{
+"text": "アカウントのAPIアクティビティ(誰が何をしたか)を記録・保持する監査証跡",
+"svc": "AWS CloudTrail"
+},
+{
+"text": "セキュアなマルチアカウント環境(ランディングゾーン)を自動構築・統制",
+"svc": "AWS Control Tower"
+},
+{
+"text": "自分のリソース/アカウントに影響するAWSの障害・メンテ情報を可視化",
+"svc": "AWS Health"
+}
+],
+"answer": 0
+},
+{
+"id": "m10",
+"cat": "管理・ガバナンス",
+"svc": "AWS License Manager",
+"q": "AWS License Manager は何をするサービス？",
+"choices": [
+{
+"text": "MS/Oracle/SAP等のライセンスをAWS/オンプレ横断で管理し違反を防ぐ",
+"svc": "AWS License Manager"
+},
+{
+"text": "Grafanaによるメトリクスの可視化ダッシュボード(マネージド)",
+"svc": "Amazon Managed Grafana"
+},
+{
+"text": "自分のリソース/アカウントに影響するAWSの障害・メンテ情報を可視化",
+"svc": "AWS Health"
+},
+{
+"text": "ログを集約・保存・検索(Logs Insights)する",
+"svc": "Amazon CloudWatch Logs"
+}
+],
+"answer": 0
+},
+{
+"id": "m11",
+"cat": "管理・ガバナンス",
+"svc": "AWS Auto Scaling",
+"q": "AWS Auto Scaling は何をするサービス？",
+"choices": [
+{
+"text": "EC2/ECS/DynamoDB/Aurora等 複数リソースのスケーリングを統合計画で自動化",
+"svc": "AWS Auto Scaling"
+},
+{
+"text": "アカウントのAPIアクティビティ(誰が何をしたか)を記録・保持する監査証跡",
+"svc": "AWS CloudTrail"
+},
+{
+"text": "コスト/性能/セキュリティ/耐障害性/制限をベストプラクティスで診断・推奨",
+"svc": "AWS Trusted Advisor"
+},
+{
+"text": "ワークロードをWell-Architectedフレームワーク5本柱で自己レビュー・改善点抽出",
+"svc": "AWS Well-Architected Tool"
+}
+],
+"answer": 0
+},
+{
+"id": "m12",
+"cat": "管理・ガバナンス",
+"svc": "AWS OpsWorks",
+"q": "AWS OpsWorks は何をするサービス？",
+"choices": [
+{
+"text": "Chef/Puppetによる構成管理(旧世代)",
+"svc": "AWS OpsWorks"
+},
+{
+"text": "Prometheus互換のモニタリング用メトリクス収集・保存(マネージド)",
+"svc": "Amazon Managed Service for Prometheus"
+},
+{
+"text": "AWSリソースをテンプレートでコード化し整然とプロビジョニング(IaC)",
+"svc": "AWS CloudFormation"
+},
+{
+"text": "EC2/ECS/DynamoDB/Aurora等 複数リソースのスケーリングを統合計画で自動化",
+"svc": "AWS Auto Scaling"
+}
+],
+"answer": 0
+},
+{
+"id": "m2",
+"cat": "管理・ガバナンス",
+"svc": "AWS CloudTrail",
+"q": "AWS CloudTrail は何をするサービス？",
+"choices": [
+{
+"text": "アカウントのAPIアクティビティ(誰が何をしたか)を記録・保持する監査証跡",
+"svc": "AWS CloudTrail"
+},
+{
+"text": "Chef/Puppetによる構成管理(旧世代)",
+"svc": "AWS OpsWorks"
+},
+{
+"text": "AWSサービスの各種上限(クォータ)を一覧・引き上げ申請する",
+"svc": "Service Quotas"
+},
+{
+"text": "AWSリソースをテンプレートでコード化し整然とプロビジョニング(IaC)",
+"svc": "AWS CloudFormation"
+}
+],
+"answer": 0
+},
+{
+"id": "m3",
+"cat": "管理・ガバナンス",
+"svc": "AWS Config",
+"q": "AWS Config は何をするサービス？",
+"choices": [
+{
+"text": "リソース構成を継続記録し、望ましい構成への準拠を自動評価",
+"svc": "AWS Config"
+},
+{
+"text": "メトリクス・ログ・アラームでリソースとアプリを監視(運用の可観測性)",
+"svc": "Amazon CloudWatch"
+},
+{
+"text": "EC2/ECS/DynamoDB/Aurora等 複数リソースのスケーリングを統合計画で自動化",
+"svc": "AWS Auto Scaling"
+},
+{
+"text": "コンテナ/サーバーレスのインフラをテンプレート化しセルフサービス提供(プラットフォームチーム向け)",
+"svc": "AWS Proton"
+}
+],
+"answer": 0
+},
+{
+"id": "m4",
+"cat": "管理・ガバナンス",
+"svc": "AWS CloudFormation",
+"q": "AWS CloudFormation は何をするサービス？",
+"choices": [
+{
+"text": "AWSリソースをテンプレートでコード化し整然とプロビジョニング(IaC)",
+"svc": "AWS CloudFormation"
+},
+{
+"text": "MS/Oracle/SAP等のライセンスをAWS/オンプレ横断で管理し違反を防ぐ",
+"svc": "AWS License Manager"
+},
+{
+"text": "承認済みのITサービス(CFN製品)をユーザーにセルフサービス提供し統制",
+"svc": "AWS Service Catalog"
+},
+{
+"text": "コスト/性能/セキュリティ/耐障害性/制限をベストプラクティスで診断・推奨",
+"svc": "AWS Trusted Advisor"
+}
+],
+"answer": 0
+},
+{
+"id": "m5",
+"cat": "管理・ガバナンス",
+"svc": "AWS Systems Manager",
+"q": "AWS Systems Manager (SSM) は何をするサービス？",
+"choices": [
+{
+"text": "EC2/オンプレの運用管理(パッチ・コマンド実行・パラメータ・踏み台不要のシェル)",
+"svc": "AWS Systems Manager"
+},
+{
+"text": "Grafanaによるメトリクスの可視化ダッシュボード(マネージド)",
+"svc": "Amazon Managed Grafana"
+},
+{
+"text": "AWSリソースをテンプレートでコード化し整然とプロビジョニング(IaC)",
+"svc": "AWS CloudFormation"
+},
+{
+"text": "コンテナ/サーバーレスのインフラをテンプレート化しセルフサービス提供(プラットフォームチーム向け)",
+"svc": "AWS Proton"
+}
+],
+"answer": 0
+},
+{
+"id": "m6",
+"cat": "管理・ガバナンス",
+"svc": "AWS Control Tower",
+"q": "AWS Control Tower は何をするサービス？",
+"choices": [
+{
+"text": "セキュアなマルチアカウント環境(ランディングゾーン)を自動構築・統制",
+"svc": "AWS Control Tower"
+},
+{
+"text": "EC2/オンプレの運用管理(パッチ・コマンド実行・パラメータ・踏み台不要のシェル)",
+"svc": "AWS Systems Manager"
+},
+{
+"text": "アカウントのAPIアクティビティ(誰が何をしたか)を記録・保持する監査証跡",
+"svc": "AWS CloudTrail"
+},
+{
+"text": "ワークロードをWell-Architectedフレームワーク5本柱で自己レビュー・改善点抽出",
+"svc": "AWS Well-Architected Tool"
+}
+],
+"answer": 0
+},
+{
+"id": "m7",
+"cat": "管理・ガバナンス",
+"svc": "AWS Service Catalog",
+"q": "AWS Service Catalog は何をするサービス？",
+"choices": [
+{
+"text": "承認済みのITサービス(CFN製品)をユーザーにセルフサービス提供し統制",
+"svc": "AWS Service Catalog"
+},
+{
+"text": "メトリクス・ログ・アラームでリソースとアプリを監視(運用の可観測性)",
+"svc": "Amazon CloudWatch"
+},
+{
+"text": "コスト/性能/セキュリティ/耐障害性/制限をベストプラクティスで診断・推奨",
+"svc": "AWS Trusted Advisor"
+},
+{
+"text": "EC2/オンプレの運用管理(パッチ・コマンド実行・パラメータ・踏み台不要のシェル)",
+"svc": "AWS Systems Manager"
+}
+],
+"answer": 0
+},
+{
+"id": "m8",
+"cat": "管理・ガバナンス",
+"svc": "AWS Trusted Advisor",
+"q": "AWS Trusted Advisor は何をするサービス？",
+"choices": [
+{
+"text": "コスト/性能/セキュリティ/耐障害性/制限をベストプラクティスで診断・推奨",
+"svc": "AWS Trusted Advisor"
+},
+{
+"text": "セキュアなマルチアカウント環境(ランディングゾーン)を自動構築・統制",
+"svc": "AWS Control Tower"
+},
+{
+"text": "Grafanaによるメトリクスの可視化ダッシュボード(マネージド)",
+"svc": "Amazon Managed Grafana"
+},
+{
+"text": "ログを集約・保存・検索(Logs Insights)する",
+"svc": "Amazon CloudWatch Logs"
+}
+],
+"answer": 0
+},
+{
+"id": "m9",
+"cat": "管理・ガバナンス",
+"svc": "AWS Health",
+"q": "AWS Health (Personal Health Dashboard) は何をするサービス？",
+"choices": [
+{
+"text": "自分のリソース/アカウントに影響するAWSの障害・メンテ情報を可視化",
+"svc": "AWS Health"
+},
+{
+"text": "ワークロードをWell-Architectedフレームワーク5本柱で自己レビュー・改善点抽出",
+"svc": "AWS Well-Architected Tool"
+},
+{
+"text": "コンテナ/サーバーレスのインフラをテンプレート化しセルフサービス提供(プラットフォームチーム向け)",
+"svc": "AWS Proton"
+},
+{
+"text": "ログを集約・保存・検索(Logs Insights)する",
+"svc": "Amazon CloudWatch Logs"
+}
+],
+"answer": 0
+},
+{
+"id": "x4",
+"cat": "管理・ガバナンス",
+"svc": "AWS Well-Architected Tool",
+"q": "AWS Well-Architected Tool は何をするサービス？",
+"choices": [
+{
+"text": "ワークロードをWell-Architectedフレームワーク5本柱で自己レビュー・改善点抽出",
+"svc": "AWS Well-Architected Tool"
+},
+{
+"text": "コンテナ/サーバーレスのインフラをテンプレート化しセルフサービス提供(プラットフォームチーム向け)",
+"svc": "AWS Proton"
+},
+{
+"text": "Chef/Puppetによる構成管理(旧世代)",
+"svc": "AWS OpsWorks"
+},
+{
+"text": "コスト/性能/セキュリティ/耐障害性/制限をベストプラクティスで診断・推奨",
+"svc": "AWS Trusted Advisor"
+}
+],
+"answer": 0
+},
+{
+"id": "x5",
+"cat": "管理・ガバナンス",
+"svc": "AWS Proton",
+"q": "AWS Proton は何をするサービス？",
+"choices": [
+{
+"text": "コンテナ/サーバーレスのインフラをテンプレート化しセルフサービス提供(プラットフォームチーム向け)",
+"svc": "AWS Proton"
+},
+{
+"text": "自分のリソース/アカウントに影響するAWSの障害・メンテ情報を可視化",
+"svc": "AWS Health"
+},
+{
+"text": "Prometheus互換のモニタリング用メトリクス収集・保存(マネージド)",
+"svc": "Amazon Managed Service for Prometheus"
+},
+{
+"text": "コスト/性能/セキュリティ/耐障害性/制限をベストプラクティスで診断・推奨",
+"svc": "AWS Trusted Advisor"
+}
+],
+"answer": 0
+},
+{
+"id": "x6",
+"cat": "管理・ガバナンス",
+"svc": "Service Quotas",
+"q": "Service Quotas は何をするサービス？",
+"choices": [
+{
+"text": "AWSサービスの各種上限(クォータ)を一覧・引き上げ申請する",
+"svc": "Service Quotas"
+},
+{
+"text": "アカウントのAPIアクティビティ(誰が何をしたか)を記録・保持する監査証跡",
+"svc": "AWS CloudTrail"
+},
+{
+"text": "ログを集約・保存・検索(Logs Insights)する",
+"svc": "Amazon CloudWatch Logs"
+},
+{
+"text": "自分のリソース/アカウントに影響するAWSの障害・メンテ情報を可視化",
+"svc": "AWS Health"
+}
+],
+"answer": 0
+},
+{
+"id": "x7",
+"cat": "管理・ガバナンス",
+"svc": "Amazon CloudWatch Logs",
+"q": "Amazon CloudWatch Logs は何をするサービス？",
+"choices": [
+{
+"text": "ログを集約・保存・検索(Logs Insights)する",
+"svc": "Amazon CloudWatch Logs"
+},
+{
+"text": "Grafanaによるメトリクスの可視化ダッシュボード(マネージド)",
+"svc": "Amazon Managed Grafana"
+},
+{
+"text": "セキュアなマルチアカウント環境(ランディングゾーン)を自動構築・統制",
+"svc": "AWS Control Tower"
+},
+{
+"text": "ワークロードをWell-Architectedフレームワーク5本柱で自己レビュー・改善点抽出",
+"svc": "AWS Well-Architected Tool"
+}
+],
+"answer": 0
+},
+{
+"id": "x8",
+"cat": "管理・ガバナンス",
+"svc": "Amazon Managed Grafana",
+"q": "Amazon Managed Grafana は何をするサービス？",
+"choices": [
+{
+"text": "Grafanaによるメトリクスの可視化ダッシュボード(マネージド)",
+"svc": "Amazon Managed Grafana"
+},
+{
+"text": "自分のリソース/アカウントに影響するAWSの障害・メンテ情報を可視化",
+"svc": "AWS Health"
+},
+{
+"text": "コンテナ/サーバーレスのインフラをテンプレート化しセルフサービス提供(プラットフォームチーム向け)",
+"svc": "AWS Proton"
+},
+{
+"text": "AWSサービスの各種上限(クォータ)を一覧・引き上げ申請する",
+"svc": "Service Quotas"
+}
+],
+"answer": 0
+},
+{
+"id": "x9",
+"cat": "管理・ガバナンス",
+"svc": "Amazon Managed Service for Prometheus",
+"q": "Amazon Managed Service for Prometheus は何をするサービス？",
+"choices": [
+{
+"text": "Prometheus互換のモニタリング用メトリクス収集・保存(マネージド)",
+"svc": "Amazon Managed Service for Prometheus"
+},
+{
+"text": "承認済みのITサービス(CFN製品)をユーザーにセルフサービス提供し統制",
+"svc": "AWS Service Catalog"
+},
+{
+"text": "AWSリソースをテンプレートでコード化し整然とプロビジョニング(IaC)",
+"svc": "AWS CloudFormation"
+},
+{
+"text": "セキュアなマルチアカウント環境(ランディングゾーン)を自動構築・統制",
+"svc": "AWS Control Tower"
+}
+],
+"answer": 0
+}
+]
+}
+</script>
+<script>
+(function(){
+  const DATA = JSON.parse(document.getElementById('quizdata').textContent);
+  const all = DATA.questions;
+
+  // ===== クラウド同期（任意）=====
+  // GAS WebアプリのURLを入れると、1問ごとに回答をクラウド（スプレッドシート）へ自動送信する。
+  // 空のままなら送信しない（localStorageのみ）＝友達配布版はこのまま空で配れる。
+  const SYNC_URL = 'https://still-dust-e041.yuvegbsiu36.workers.dev/';  // 自分用: Cloudflare Worker（同期ON）
+  const DEVICE  = 'phone';             // このHTMLを使う端末の名札（例: 'phone' / 'pc'）。分析で端末を区別できる
+  const QUEUE_KEY = 'sap_c02_quiz_queue_v1';   // 未送信レコードの一時置き場
+
+  function loadQueue(){ try{ return JSON.parse(localStorage.getItem(QUEUE_KEY)) || []; }catch(e){ return []; } }
+  function saveQueue(q){ try{ localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); }catch(e){} }
+
+  // 未送信キューをまとめて送る。1件ずつ送って成功したものだけキューから外す（通信途切れに強い）
+  async function flushQueue(){
+    if(!SYNC_URL) return;
+    let q = loadQueue();
+    if(q.length === 0) return;
+    const remain = [];
+    for(const rec of q){
+      try{
+        // GASはプリフライトを嫌うので text/plain で送る（CORS回避の定番）
+        const res = await fetch(SYNC_URL, {
+          method:'POST',
+          headers:{'Content-Type':'text/plain;charset=utf-8'},
+          body: JSON.stringify(rec)
+        });
+        if(!res.ok) throw new Error('status '+res.status);
+      }catch(e){
+        remain.push(rec);   // 失敗（オフライン/電波切れ）→ 残して次回再送
+      }
+    }
+    saveQueue(remain);
+  }
+
+  // 回答1件をキューに積んで即送信を試す（失敗してもキューに残るので取りこぼさない）
+  function enqueueSync(rec){
+    if(!SYNC_URL) return;
+    const q = loadQueue();
+    q.push(rec);
+    saveQueue(q);
+    flushQueue();
+  }
+
+  // オンライン復帰時・起動時にも未送信ぶんを再送（通勤中トンネル対策）
+  window.addEventListener('online', flushQueue);
+  flushQueue();
+
+  // ===== 学習データ記録（localStorage）=====
+  const LS_KEY = 'sap_c02_quiz_log_v1';
+  function loadLog(){
+    try{ return JSON.parse(localStorage.getItem(LS_KEY)) || []; }
+    catch(e){ return []; }
+  }
+  function saveLog(log){
+    try{ localStorage.setItem(LS_KEY, JSON.stringify(log)); }catch(e){}
+  }
+  // 1問回答するたびに1レコード追記
+  function recordAnswer(q, chosen, correct){
+    const log = loadLog();
+    const rec = {
+      rid: (Date.now().toString(36) + Math.random().toString(36).slice(2,8)), // 一意ID（二重送信の排除用）
+      t: Date.now(),
+      id: q.id,
+      cat: q.cat,
+      svc: q.svc,
+      correct: correct,
+      chosenSvc: chosen ? chosen.svc : null,   // 選んだ誤答が何のサービスか（取り違え分析用）
+      mode: mode,
+      device: DEVICE                            // どの端末で解いたか
+    };
+    log.push(rec);
+    saveLog(log);
+    enqueueSync(rec);                           // クラウドへ送信（SYNC_URL未設定なら何もしない）
+  }
+
+  // カテゴリ選択肢
+  const cats = [...new Set(all.map(q=>q.cat))];
+  const catSel = document.getElementById('catSel');
+  catSel.innerHTML = '<option value="__all__">すべて ('+all.length+'問)</option>' +
+    cats.map(c=>'<option value="'+c+'">'+c+' ('+all.filter(q=>q.cat===c).length+'問)</option>').join('');
+
+  const el = id=>document.getElementById(id);
+  let pool=[], idx=0, score=0, wrong=[], answered=false, answeredCount=0, mode='normal';
+
+  function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+  function updatePoolInfo(){
+    const c=catSel.value;
+    const n=(c==='__all__')?all.length:all.filter(q=>q.cat===c).length;
+    el('poolInfo').textContent = '対象 '+n+'問';
+  }
+  catSel.addEventListener('change',updatePoolInfo);
+  updatePoolInfo();
+
+  function syncMode(){
+    const sv = el('modeSel').value==='survival';
+    el('countSel').disabled = sv;              // サバイバルは出題数無関係
+    el('countLabel').style.opacity = sv ? .4 : 1;
+    el('poolInfo').textContent = sv
+      ? '対象から1問ずつ出し、間違えたら終了'
+      : (function(){const c=catSel.value;const n=(c==='__all__')?all.length:all.filter(q=>q.cat===c).length;return '対象 '+n+'問';})();
+  }
+  el('modeSel').addEventListener('change',syncMode);
+  catSel.addEventListener('change',()=>{ if(el('modeSel').value==='survival') syncMode(); });
+  syncMode();
+
+  function buildPool(){
+    const c=catSel.value;
+    let base=(c==='__all__')?all:all.filter(q=>q.cat===c);
+    base=shuffle(base);
+    if(mode==='survival') return base; // サバイバルは出題数無視で全問から出し続ける
+    const cnt=parseInt(el('countSel').value,10);
+    if(cnt>0) base=base.slice(0,cnt);
+    return base;
+  }
+
+  function start(list){
+    pool=list; idx=0; score=0; wrong=[]; answered=false; answeredCount=0;
+    el('start').classList.add('hidden');
+    el('result').classList.add('hidden');
+    el('mydata').classList.add('hidden');
+    el('quiz').classList.remove('hidden');
+    render();
+  }
+
+  function render(){
+    answered=false;
+    const q=pool[idx];
+    el('qcat').textContent=q.cat;
+    el('qtext').textContent=q.q;
+    el('prog').textContent=(idx+1)+' / '+pool.length;
+    el('score').textContent=score;
+    el('rate').textContent=(answeredCount===0?0:Math.round(score/answeredCount*100))+'%';
+    el('progbar').style.width=((idx)/pool.length*100)+'%';
+    el('explain').classList.remove('show');
+    el('nextBtn').classList.add('hidden');
+
+    // 選択肢をシャッフルして表示（正解位置を毎回変える）
+    const order=shuffle(q.choices.map((c,i)=>({c,i})));
+    const box=el('choices'); box.innerHTML='';
+    order.forEach(o=>{
+      const b=document.createElement('button');
+      b.className='choice'; b.textContent=o.c.text;
+      b.dataset.svc=o.c.svc; b.dataset.text=o.c.text;
+      b.dataset.isanswer = (o.i===q.answer) ? '1' : '';
+      b.onclick=()=>pick(b,o.i===q.answer,q,o.c);
+      box.appendChild(b);
+    });
+  }
+
+  function pick(btn,correct,q,chosen){
+    if(answered) return;
+    answered=true;
+    answeredCount++;
+    const correctText=q.choices[q.answer].text;
+    const buttons=el('choices').querySelectorAll('.choice');
+    buttons.forEach(b=>{
+      b.disabled=true;
+      const isAns = b.dataset.isanswer==='1';
+      const isChosen = (b===btn);
+      if(isAns) b.classList.add('correct');
+      if(isChosen && !correct) b.classList.add('wrong');
+      // 全選択肢に「= 何のサービスか」を付ける（1問で4サービス学べる）
+      const tag = document.createElement('span');
+      tag.style.cssText='display:block;margin-top:6px;font-size:.82rem;color:var(--fg);';
+      tag.innerHTML='＝ <b style="color:'+(isAns?'var(--ok)':'var(--accent)')+'">'+b.dataset.svc+'</b>'
+        + (isAns?' ✅ これが正解':'')
+        + (isChosen&&!correct?' ← あなたの回答':'');
+      b.appendChild(tag);
+    });
+    if(correct){ score++; }
+    else{ wrong.push(q); }
+    recordAnswer(q, chosen, correct);   // 学習データへ1問分を記録
+    el('score').textContent=score;
+    const ex=el('explain');
+    ex.innerHTML='<b>'+q.svc+'</b> ＝ '+correctText+(correct?' ✅ 正解':' ❌ 不正解');
+    ex.classList.add('show');
+    const survivalDead = (mode==='survival' && !correct);
+    const nb=el('nextBtn');
+    nb.textContent = survivalDead ? '結果を見る ▶' : '次へ ▶';
+    nb.dataset.dead = survivalDead ? '1' : '';
+    nb.classList.remove('hidden');
+    el('progbar').style.width=((idx+1)/pool.length*100)+'%';
+  }
+
+  function next(){
+    if(el('nextBtn').dataset.dead==='1'){ finish(); return; } // サバイバル敗退
+    idx++;
+    if(idx>=pool.length){ finish(); }
+    else render();
+  }
+
+  function finish(){
+    el('quiz').classList.add('hidden');
+    el('result').classList.remove('hidden');
+    el('mydata').classList.remove('hidden');
+    refreshDataSummary();
+    const done=answeredCount;
+    const total=pool.length;
+
+    // サバイバルモード: 連続正解数(ストリーク)を主役に表示
+    if(mode==='survival'){
+      el('finalRate').textContent=score+' 連続';
+      const cleared = (score===total); // 全問正解で生き残り切った
+      if(done===0){
+        el('finalScore').textContent='1問も回答していません';
+      }else if(cleared){
+        el('finalScore').textContent='🏆 全'+total+'問を1問も間違えず完走！';
+      }else{
+        el('finalScore').textContent=score+'問 連続正解で終了（'+(score+1)+'問目で不正解）';
+      }
+      const wrongByCat={};
+      wrong.forEach(q=>{wrongByCat[q.cat]=(wrongByCat[q.cat]||0)+1;});
+      const cb=el('catBreak');
+      cb.innerHTML = wrong.length===0
+        ? '<div>🎉 ノーミス！</div>'
+        : '<div>最後に間違えた問題のカテゴリ:</div>'+Object.entries(wrongByCat).map(([c,n])=>'<div>・'+c+'</div>').join('');
+      el('retryWrongBtn').style.display = wrong.length? '' : 'none';
+      return;
+    }
+
+    // 通常モード（中断対応: 分母は実際に回答した問数）
+    const partial = done < total;
+    const rate=done?Math.round(score/done*100):0;
+    el('finalRate').textContent=rate+'%';
+    if(done===0){
+      el('finalScore').textContent='1問も回答していません';
+    }else{
+      el('finalScore').textContent=score+' / '+done+' 問正解'
+        + (partial ? '（中断：全'+total+'問中 '+done+'問まで）' : '（全'+total+'問 完了）');
+    }
+    // カテゴリ別の誤答集計
+    const wrongByCat={};
+    wrong.forEach(q=>{wrongByCat[q.cat]=(wrongByCat[q.cat]||0)+1;});
+    const cb=el('catBreak');
+    if(done===0){ cb.innerHTML='<div>（回答なし）</div>'; }
+    else if(wrong.length===0){ cb.innerHTML='<div>🎉 回答した'+done+'問は全問正解！</div>'; }
+    else{
+      cb.innerHTML='<div>間違えたカテゴリ:</div>'+
+        Object.entries(wrongByCat).map(([c,n])=>'<div>・'+c+'：'+n+'問</div>').join('');
+    }
+    el('retryWrongBtn').style.display = wrong.length? '' : 'none';
+  }
+
+  el('startBtn').onclick=()=>{ mode=el('modeSel').value; start(buildPool()); };
+  el('nextBtn').onclick=next;
+  el('quitBtn').onclick=finish;
+  el('againBtn').onclick=()=>{el('result').classList.add('hidden');el('start').classList.remove('hidden');el('mydata').classList.remove('hidden');refreshDataSummary();};
+  el('retryWrongBtn').onclick=()=>start(shuffle(wrong));
+
+  // ===== マイ学習データ：集計・分析・書き出し =====
+  function refreshDataSummary(){
+    const log = loadLog();
+    const n = log.length;
+    const correct = log.filter(r=>r.correct).length;
+    const rate = n ? Math.round(correct/n*100) : 0;
+    el('dataSummary').textContent = n ? ('累計 '+n+'回答 ・ 正答率 '+rate+'%') : 'まだ回答履歴がありません';
+    el('overallbar').style.width = rate+'%';
+  }
+
+  function analyze(){
+    const log = loadLog();
+    const box = el('analysis');
+    if(log.length===0){ box.innerHTML='<div>履歴がありません。クイズを解くと溜まります。</div>'; return; }
+
+    // サービス別 正答率（回答2回以上を対象に、正答率が低い順）
+    const bySvc={};
+    log.forEach(r=>{ (bySvc[r.svc]=bySvc[r.svc]||{n:0,ok:0}); bySvc[r.svc].n++; if(r.correct) bySvc[r.svc].ok++; });
+    const weakSvc = Object.entries(bySvc)
+      .map(([svc,v])=>({svc,n:v.n,ok:v.ok,rate:Math.round(v.ok/v.n*100)}))
+      .filter(x=>x.n>=1)
+      .sort((a,b)=> a.rate-b.rate || b.n-a.n)
+      .slice(0,8);
+
+    // カテゴリ別 正答率
+    const byCat={};
+    log.forEach(r=>{ (byCat[r.cat]=byCat[r.cat]||{n:0,ok:0}); byCat[r.cat].n++; if(r.correct) byCat[r.cat].ok++; });
+    const catRows = Object.entries(byCat)
+      .map(([cat,v])=>({cat,n:v.n,rate:Math.round(v.ok/v.n*100)}))
+      .sort((a,b)=>a.rate-b.rate);
+
+    // 取り違えペア（正解svc ← 選んだ誤答svc）
+    const conf={};
+    log.filter(r=>!r.correct && r.chosenSvc).forEach(r=>{
+      const k=r.svc+' ⟵ '+r.chosenSvc;
+      conf[k]=(conf[k]||0)+1;
+    });
+    const confRows = Object.entries(conf).sort((a,b)=>b[1]-a[1]).slice(0,8);
+
+    let h='';
+    h+='<div style="margin:6px 0 2px;color:var(--ng)"><b>弱いサービス（正答率が低い順）</b></div>';
+    h+=weakSvc.map(x=>'<div>・'+x.svc+'：'+x.rate+'%（'+x.ok+'/'+x.n+'）</div>').join('');
+    h+='<div style="margin:10px 0 2px;color:var(--accent)"><b>カテゴリ別 正答率</b></div>';
+    h+=catRows.map(x=>'<div>・'+x.cat+'：'+x.rate+'%（'+x.n+'回答）</div>').join('');
+    if(confRows.length){
+      h+='<div style="margin:10px 0 2px;color:#f59e0b"><b>混同しやすいペア（正解 ⟵ 選んだ誤答）</b></div>';
+      h+=confRows.map(([k,c])=>'<div>・'+k+'：'+c+'回</div>').join('');
+    }
+    box.innerHTML=h;
+  }
+
+  function exportData(){
+    const log = loadLog();
+    const payload = {
+      meta: { title:'SAP-C02 クイズ 学習ログ', exported: new Date().toISOString(), totalAnswers: log.length },
+      log: log
+    };
+    const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const d = new Date();
+    const pad=x=>String(x).padStart(2,'0');
+    a.href=url;
+    a.download='sap-c02-quizlog_'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'_'+pad(d.getHours())+pad(d.getMinutes())+'.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  el('analyzeBtn').onclick=analyze;
+  el('exportBtn').onclick=exportData;
+  el('clearBtn').onclick=()=>{
+    if(confirm('このブラウザの学習履歴を全部消します。よろしいですか？')){
+      saveLog([]); refreshDataSummary(); el('analysis').innerHTML='<div>履歴を消去しました。</div>';
+    }
+  };
+  refreshDataSummary();
+})();
+</script>
+</body>
+</html>
